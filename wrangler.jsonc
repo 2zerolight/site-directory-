@@ -8,9 +8,7 @@
     {
       "binding": "DB",
       "database_name": "site-directory-db",
-      // placeholder id for local dev — replace with the real id printed by
-      // `npx wrangler d1 create site-directory-db` before deploying to production
-      "database_id": "local-dev-placeholder"
+      "database_id": "c3a6ab03-3f75-4588-88f0-e600481cb488"
     }
   ]
 }
