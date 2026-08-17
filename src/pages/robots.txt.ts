@@ -4,7 +4,7 @@ import { SITE_URL } from '../lib/site';
 export const GET: APIRoute = () => {
   const body = `User-agent: *
 Allow: /
-Disallow: /admin
+Disallow: /dashboard
 Disallow: /go/
 
 Sitemap: ${new URL('/sitemap.xml', SITE_URL).toString()}

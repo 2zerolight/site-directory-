@@ -24,4 +24,4 @@
 
 ## 관리자 페이지
 
-`/admin`에서 로그인 후 사이트 등록 승인/거절을 처리할 수 있습니다. 비밀번호는 Cloudflare Worker 시크릿(`ADMIN_PASSWORD`)으로 관리됩니다.
+`/dashboard`에서 로그인 후 사이트 등록 승인/거절을 처리할 수 있습니다. 비밀번호는 Cloudflare Worker 시크릿(`ADMIN_PASSWORD`)으로 관리됩니다.
