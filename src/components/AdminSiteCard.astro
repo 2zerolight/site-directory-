@@ -125,7 +125,14 @@ const statusBadgeClass = {
         {textFields.map(([formName, label, value, type]) => (
           <div>
             <label class={adminLabelClass} for={`${formName}-${site.id}`}>{label}</label>
-            <input id={`${formName}-${site.id}`} name={formName} type={type} value={value ?? ''} class={adminInputClass} />
+            <input
+              id={`${formName}-${site.id}`}
+              name={formName}
+              type={type === 'url' ? 'text' : type}
+              inputmode={type === 'url' ? 'url' : undefined}
+              value={value ?? ''}
+              class={adminInputClass}
+            />
           </div>
         ))}
 

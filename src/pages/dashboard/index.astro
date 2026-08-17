@@ -249,4 +249,19 @@ const tabs: { value: AdminSiteStatusFilter; label: string }[] = [
       )}
     </div>
   )}
+
+  <script>
+    function withDefaultProtocol(raw: string): string {
+      const trimmed = raw.trim();
+      if (!trimmed || /^https?:\/\//i.test(trimmed)) return trimmed;
+      return `https://${trimmed}`;
+    }
+
+    document.querySelectorAll('input[inputmode="url"]').forEach((el) => {
+      el.addEventListener('blur', () => {
+        const input = el as HTMLInputElement;
+        input.value = withDefaultProtocol(input.value);
+      });
+    });
+  </script>
 </Layout>

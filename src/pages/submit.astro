@@ -96,7 +96,7 @@ if (Astro.request.method === 'POST') {
   } else if (!formValues.name || formValues.name.length > 100) {
     errorMessage = '사이트 이름을 입력해주세요 (100자 이내).';
   } else if (!normalizedUrl) {
-    errorMessage = '올바른 사이트 URL을 입력해주세요 (http:// 또는 https://).';
+    errorMessage = '올바른 사이트 URL을 입력해주세요 (예: example.com).';
   } else if (!formValues.tagline || formValues.tagline.length > 120) {
     errorMessage = '한 줄 소개를 입력해주세요 (120자 이내).';
   } else if (!formValues.description || formValues.description.length > 2000) {
@@ -112,7 +112,7 @@ if (Astro.request.method === 'POST') {
   } else if (formValues.platform && !PLATFORMS.includes(formValues.platform as (typeof PLATFORMS)[number])) {
     errorMessage = '올바른 플랫폼을 선택해주세요.';
   } else if (!logo.ok || !cover.ok || !blog.ok || !youtube.ok || !instagram.ok || !facebook.ok || !otherSns.ok) {
-    errorMessage = '이미지·SNS URL 형식을 확인해주세요 (http:// 또는 https://).';
+    errorMessage = '이미지·SNS URL 형식을 확인해주세요 (예: example.com).';
   } else {
     const token = generateVerificationToken();
     const slug = slugify(formValues.name);
@@ -204,7 +204,7 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
         <div>
           <label class={labelClass} for="url"><span>사이트 URL<span class="ml-0.5 text-rose-500">*</span></span></label>
           <div class="mt-1.5 flex gap-2">
-            <input id="url" name="url" type="url" required placeholder="https://example.com" value={formValues.url} class={`${inputClass} mt-0 flex-1`} />
+            <input id="url" name="url" type="text" inputmode="url" required placeholder="example.com" value={formValues.url} class={`${inputClass} mt-0 flex-1`} />
             <button
               type="button"
               id="autofill-btn"
@@ -235,11 +235,11 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
         <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div>
             <label class={labelClass} for="logoUrl"><span>로고 이미지 URL</span></label>
-            <input id="logoUrl" name="logoUrl" type="url" value={formValues.logoUrl} class={inputClass} placeholder="https://" />
+            <input id="logoUrl" name="logoUrl" type="text" inputmode="url" value={formValues.logoUrl} class={inputClass} placeholder="https://" />
           </div>
           <div>
             <label class={labelClass} for="coverImageUrl"><span>대표 이미지 URL</span></label>
-            <input id="coverImageUrl" name="coverImageUrl" type="url" value={formValues.coverImageUrl} class={inputClass} placeholder="https://" />
+            <input id="coverImageUrl" name="coverImageUrl" type="text" inputmode="url" value={formValues.coverImageUrl} class={inputClass} placeholder="https://" />
           </div>
         </div>
       </FormSection>
@@ -348,23 +348,23 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
         <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div>
             <label class={labelClass} for="blogUrl"><span>블로그</span></label>
-            <input id="blogUrl" name="blogUrl" type="url" value={formValues.blogUrl} class={inputClass} placeholder="https://" />
+            <input id="blogUrl" name="blogUrl" type="text" inputmode="url" value={formValues.blogUrl} class={inputClass} placeholder="https://" />
           </div>
           <div>
             <label class={labelClass} for="youtubeUrl"><span>유튜브</span></label>
-            <input id="youtubeUrl" name="youtubeUrl" type="url" value={formValues.youtubeUrl} class={inputClass} placeholder="https://" />
+            <input id="youtubeUrl" name="youtubeUrl" type="text" inputmode="url" value={formValues.youtubeUrl} class={inputClass} placeholder="https://" />
           </div>
           <div>
             <label class={labelClass} for="instagramUrl"><span>인스타그램</span></label>
-            <input id="instagramUrl" name="instagramUrl" type="url" value={formValues.instagramUrl} class={inputClass} placeholder="https://" />
+            <input id="instagramUrl" name="instagramUrl" type="text" inputmode="url" value={formValues.instagramUrl} class={inputClass} placeholder="https://" />
           </div>
           <div>
             <label class={labelClass} for="facebookUrl"><span>페이스북</span></label>
-            <input id="facebookUrl" name="facebookUrl" type="url" value={formValues.facebookUrl} class={inputClass} placeholder="https://" />
+            <input id="facebookUrl" name="facebookUrl" type="text" inputmode="url" value={formValues.facebookUrl} class={inputClass} placeholder="https://" />
           </div>
           <div class="sm:col-span-2">
             <label class={labelClass} for="otherSnsUrl"><span>기타 SNS</span></label>
-            <input id="otherSnsUrl" name="otherSnsUrl" type="url" value={formValues.otherSnsUrl} class={inputClass} placeholder="https://" />
+            <input id="otherSnsUrl" name="otherSnsUrl" type="text" inputmode="url" value={formValues.otherSnsUrl} class={inputClass} placeholder="https://" />
           </div>
         </div>
       </FormSection>
@@ -452,6 +452,19 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
       categorySelect.addEventListener('change', syncPlatformEnabled);
     }
 
+    function withDefaultProtocol(raw: string): string {
+      const trimmed = raw.trim();
+      if (!trimmed || /^https?:\/\//i.test(trimmed)) return trimmed;
+      return `https://${trimmed}`;
+    }
+
+    document.querySelectorAll('input[inputmode="url"]').forEach((el) => {
+      el.addEventListener('blur', () => {
+        const input = el as HTMLInputElement;
+        input.value = withDefaultProtocol(input.value);
+      });
+    });
+
     const autofillBtn = document.getElementById('autofill-btn') as HTMLButtonElement | null;
     const autofillStatus = document.getElementById('autofill-status');
     const urlInput = document.getElementById('url') as HTMLInputElement | null;
@@ -466,6 +479,7 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
     }
 
     autofillBtn?.addEventListener('click', async () => {
+      if (urlInput) urlInput.value = withDefaultProtocol(urlInput.value);
       const url = urlInput?.value.trim();
       if (!url) {
         urlInput?.focus();
