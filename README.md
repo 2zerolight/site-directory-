@@ -1,43 +1,27 @@
-# Astro Starter Kit: Minimal
+# 사이트다
 
-```sh
-npm create astro@latest -- --template minimal
-```
+분야별로 국내 웹사이트를 검색하고 발견하는 디렉토리 플랫폼입니다.
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+- 배포 주소: https://siteda.kr
+- 스택: Astro (server output) + Cloudflare Workers + D1
+- 배포 방식: `main` 브랜치에 push하면 Cloudflare Workers Builds가 자동으로 빌드·배포합니다.
 
-## 🚀 Project Structure
-
-Inside of your Astro project, you'll see the following folders and files:
-
-```text
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
-```
-
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
-
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
-
-Any static assets, like images, can be placed in the `public/` directory.
-
-## 🧞 Commands
-
-All commands are run from the root of the project, from a terminal:
+## 🧞 로컬 개발 명령어
 
 | Command                   | Action                                           |
 | :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+| `npm install`              | 의존성 설치                                        |
+| `npm run dev`              | 로컬 개발 서버 실행 (`localhost:4321`)               |
+| `npm run build`            | `./dist/`에 프로덕션 빌드 생성                        |
+| `npm run preview`          | 배포 전 로컬에서 빌드 결과 미리보기                     |
 
-## 👀 Want to learn more?
+## 데이터베이스 (D1)
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+- 로컬: `npx wrangler d1 execute site-directory-db --local --command "..."`
+- 프로덕션: `npx wrangler d1 execute site-directory-db --remote --command "..."`
+
+관리자용 일괄 등록/검수 스크립트는 `scripts/` 디렉토리를 참고하세요.
+
+## 관리자 페이지
+
+`/admin`에서 로그인 후 사이트 등록 승인/거절을 처리할 수 있습니다. 비밀번호는 Cloudflare Worker 시크릿(`ADMIN_PASSWORD`)으로 관리됩니다.
