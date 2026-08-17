@@ -1,0 +1,194 @@
+---
+import { env } from 'cloudflare:workers';
+import Layout from '../../layouts/Layout.astro';
+import SiteCard from '../../components/SiteCard.astro';
+import { getSiteBySlug, getRelatedSites, incrementViewCount } from '../../lib/db';
+import { SITE_URL } from '../../lib/site';
+
+const { slug } = Astro.params;
+const site = slug ? await getSiteBySlug(env.DB, slug) : null;
+
+if (!site || site.status !== 'approved') {
+  return Astro.redirect('/404');
+}
+
+await incrementViewCount(env.DB, site.id);
+const relatedSites = await getRelatedSites(env.DB, site.category_id, site.id, 6);
+
+const hostname = new URL(site.url).hostname;
+
+const toChips = (raw: string | null) =>
+  (raw ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+const serviceChips = toChips(site.service_keywords);
+const keywordChips = toChips(site.main_keywords);
+
+const formatDate = (value: string | null) =>
+  value ? new Date(value.replace(' ', 'T') + 'Z').toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }) : null;
+
+const registeredDate = formatDate(site.created_at);
+const lastCheckedDate = formatDate(site.last_checked_at);
+
+const isHealthy = site.http_status !== null && site.http_status >= 200 && site.http_status < 400;
+
+const snsLinks = [
+  { label: '블로그', url: site.blog_url },
+  { label: '유튜브', url: site.youtube_url },
+  { label: '인스타그램', url: site.instagram_url },
+  { label: '페이스북', url: site.facebook_url },
+  { label: '기타 SNS', url: site.other_sns_url },
+].filter((link): link is { label: string; url: string } => Boolean(link.url));
+
+const infoRows = [
+  { label: '대분류', value: site.category_name },
+  { label: '중분류', value: site.subcategory_name },
+  { label: '사이트 유형', value: site.site_type },
+  { label: '플랫폼', value: site.platform },
+  { label: '지역', value: site.region },
+  { label: '서비스 지역', value: site.service_region },
+  { label: '운영 주체', value: site.operator_name },
+  { label: '사업자명', value: site.business_name },
+  { label: '고객센터', value: site.customer_center },
+  { label: '이메일', value: site.contact_email },
+].filter((row) => row.value);
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: site.name,
+  description: site.tagline || site.description,
+  url: new URL(`/site/${site.slug}`, SITE_URL).toString(),
+  about: {
+    '@type': 'WebSite',
+    name: site.name,
+    url: site.url,
+  },
+};
+---
+
+<Layout
+  title={site.name}
+  description={site.tagline || site.description}
+  canonicalPath={`/site/${site.slug}`}
+  jsonLd={jsonLd}
+>
+  <nav class="text-sm text-slate-400 mb-4">
+    <a href="/" class="hover:text-slate-600">홈</a> <span class="mx-1">/</span>
+    <a href={`/category/${site.category_slug}`} class="hover:text-slate-600">{site.category_name}</a>
+    {site.subcategory_name && (
+      <>
+        <span class="mx-1">/</span>
+        <a href={`/category/${site.category_slug}?sub=${site.subcategory_slug}`} class="hover:text-slate-600">{site.subcategory_name}</a>
+      </>
+    )}
+    <span class="mx-1">/</span> {site.name}
+  </nav>
+
+  {site.cover_image_url && (
+    <img src={site.cover_image_url} alt={`${site.name} 대표 이미지`} class="w-full max-h-72 object-cover rounded-lg border border-slate-200 mb-6" loading="lazy" />
+  )}
+
+  <div class="rounded-lg border border-slate-200 bg-white p-6 md:p-8">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div class="flex items-start gap-4">
+        {site.logo_url && (
+          <img src={site.logo_url} alt={`${site.name} 로고`} class="w-14 h-14 rounded-md object-cover object-left bg-white border border-slate-100 shrink-0" loading="lazy" />
+        )}
+        <div>
+          <h1 class="text-2xl font-bold text-slate-900">{site.name}</h1>
+          <p class="mt-1 text-sm text-slate-500">{hostname}</p>
+          {site.tagline && <p class="mt-2 text-slate-700 font-medium">{site.tagline}</p>}
+        </div>
+      </div>
+      <a
+        href={`/go/${site.slug}`}
+        target="_blank"
+        rel="nofollow noopener noreferrer sponsored"
+        class="shrink-0 rounded-md bg-slate-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-slate-700"
+      >
+        공식 홈페이지 방문 →
+      </a>
+    </div>
+
+    <div class="mt-4 flex flex-wrap gap-2 text-xs">
+      <span class={`rounded-full px-2.5 py-1 ${isHealthy ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+        {isHealthy ? '정상 접속 확인됨' : site.http_status ? `접속 오류 (${site.http_status})` : '접속 상태 미확인'}
+      </span>
+      <span class={`rounded-full px-2.5 py-1 ${site.is_https ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+        {site.is_https ? 'HTTPS 보안 연결' : 'HTTPS 미확인'}
+      </span>
+      <span class={`rounded-full px-2.5 py-1 ${site.ownership_verified ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
+        {site.ownership_verified ? '소유권 인증됨' : '소유권 미인증'}
+      </span>
+    </div>
+
+    {site.description && (
+      <p class="mt-6 text-slate-700 leading-relaxed whitespace-pre-line">{site.description}</p>
+    )}
+
+    {serviceChips.length > 0 && (
+      <div class="mt-6">
+        <h2 class="text-sm font-semibold text-slate-900">주요 서비스</h2>
+        <div class="mt-2 flex flex-wrap gap-2">
+          {serviceChips.map((chip) => (
+            <span class="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">{chip}</span>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {keywordChips.length > 0 && (
+      <div class="mt-4">
+        <h2 class="text-sm font-semibold text-slate-900">주요 키워드</h2>
+        <div class="mt-2 flex flex-wrap gap-2">
+          {keywordChips.map((chip) => (
+            <span class="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500">#{chip}</span>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {infoRows.length > 0 && (
+      <dl class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 border-t border-slate-100 pt-6 text-sm">
+        {infoRows.map((row) => (
+          <div class="flex gap-2">
+            <dt class="w-20 shrink-0 text-slate-400">{row.label}</dt>
+            <dd class="text-slate-700">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    )}
+
+    {snsLinks.length > 0 && (
+      <div class="mt-6 border-t border-slate-100 pt-6">
+        <h2 class="text-sm font-semibold text-slate-900">SNS</h2>
+        <div class="mt-2 flex flex-wrap gap-3">
+          {snsLinks.map((link) => (
+            <a href={link.url} target="_blank" rel="nofollow noopener noreferrer" class="text-sm text-slate-500 underline hover:text-slate-900">
+              {link.label}
+            </a>
+          ))}
+        </div>
+      </div>
+    )}
+
+    <div class="mt-6 flex flex-wrap gap-4 border-t border-slate-100 pt-6 text-xs text-slate-400">
+      {registeredDate && <span>등록일 {registeredDate}</span>}
+      {lastCheckedDate && <span>최종 확인일 {lastCheckedDate}</span>}
+      <span>조회 {site.view_count}</span>
+      <span>방문 {site.click_count}</span>
+    </div>
+  </div>
+
+  {relatedSites.length > 0 && (
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-slate-900 mb-4">같은 카테고리의 다른 사이트</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {relatedSites.map((related) => <SiteCard site={related} showCategory={false} />)}
+      </div>
+    </section>
+  )}
+</Layout>

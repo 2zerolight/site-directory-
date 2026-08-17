@@ -1,0 +1,45 @@
+---
+import { env } from 'cloudflare:workers';
+import Layout from '../layouts/Layout.astro';
+import SiteCard from '../components/SiteCard.astro';
+import { searchSites } from '../lib/db';
+
+const query = Astro.url.searchParams.get('q')?.trim() ?? '';
+const results = query ? await searchSites(env.DB, query) : [];
+---
+
+<Layout
+  title={query ? `"${query}" 검색 결과` : '검색'}
+  description="등록된 사이트를 이름이나 설명으로 검색합니다."
+  canonicalPath="/search"
+  noindex
+>
+  <h1 class="text-2xl font-bold text-slate-900">사이트 검색</h1>
+
+  <form action="/search" method="get" class="mt-4 flex gap-2 max-w-lg">
+    <input
+      type="search"
+      name="q"
+      value={query}
+      placeholder="사이트 이름이나 설명으로 검색"
+      class="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+    />
+    <button type="submit" class="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
+      검색
+    </button>
+  </form>
+
+  {query && (
+    <p class="mt-6 text-sm text-slate-500">"{query}"에 대한 검색 결과 {results.length}건</p>
+  )}
+
+  {query && results.length === 0 && (
+    <p class="mt-4 text-slate-400">검색 결과가 없습니다.</p>
+  )}
+
+  {results.length > 0 && (
+    <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {results.map((site) => <SiteCard site={site} />)}
+    </div>
+  )}
+</Layout>

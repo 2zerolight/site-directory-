@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "site-directory",
+  "compatibility_date": "2025-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "pages_build_output_dir": "./dist",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "site-directory-db",
+      // placeholder id for local dev — replace with the real id printed by
+      // `npx wrangler d1 create site-directory-db` before deploying to production
+      "database_id": "local-dev-placeholder"
+    }
+  ]
+}

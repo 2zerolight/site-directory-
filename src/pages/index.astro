@@ -1,0 +1,59 @@
+---
+import { env } from 'cloudflare:workers';
+import Layout from '../layouts/Layout.astro';
+import CategoryCard from '../components/CategoryCard.astro';
+import SiteCard from '../components/SiteCard.astro';
+import { getCategoriesWithCounts, getRecentApprovedSites, getPopularApprovedSites } from '../lib/db';
+import { SITE_NAME, SITE_DESCRIPTION, SITE_URL } from '../lib/site';
+
+const [categories, recentSites, popularSites] = await Promise.all([
+  getCategoriesWithCounts(env.DB),
+  getRecentApprovedSites(env.DB, 8),
+  getPopularApprovedSites(env.DB, 8),
+]);
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: SITE_NAME,
+  description: SITE_DESCRIPTION,
+  url: SITE_URL,
+  potentialAction: {
+    '@type': 'SearchAction',
+    target: `${SITE_URL}/search?q={search_term_string}`,
+    'query-input': 'required name=search_term_string',
+  },
+};
+---
+
+<Layout title={SITE_NAME} description={SITE_DESCRIPTION} canonicalPath="/" jsonLd={jsonLd}>
+  <section class="text-center py-8">
+    <h1 class="text-3xl md:text-4xl font-bold text-slate-900">국내 웹사이트를 분야별로 발견하세요</h1>
+    <p class="mt-3 text-slate-500 max-w-xl mx-auto">{SITE_DESCRIPTION}</p>
+  </section>
+
+  <section class="mt-6">
+    <h2 class="text-xl font-semibold text-slate-900 mb-4">카테고리</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      {categories.map((category) => <CategoryCard category={category} />)}
+    </div>
+  </section>
+
+  {popularSites.length > 0 && (
+    <section class="mt-12">
+      <h2 class="text-xl font-semibold text-slate-900 mb-4">인기 사이트</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {popularSites.map((site) => <SiteCard site={site} />)}
+      </div>
+    </section>
+  )}
+
+  {recentSites.length > 0 && (
+    <section class="mt-12">
+      <h2 class="text-xl font-semibold text-slate-900 mb-4">최근 등록된 사이트</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {recentSites.map((site) => <SiteCard site={site} />)}
+      </div>
+    </section>
+  )}
+</Layout>

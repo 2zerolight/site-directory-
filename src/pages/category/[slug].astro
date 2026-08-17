@@ -1,0 +1,137 @@
+---
+import { env } from 'cloudflare:workers';
+import Layout from '../../layouts/Layout.astro';
+import SiteCard from '../../components/SiteCard.astro';
+import {
+  getCategoryBySlug,
+  getSubcategoriesByCategory,
+  getPlatformsInCategory,
+  getApprovedSitesByCategory,
+  PAGE_SIZE,
+} from '../../lib/db';
+import { SITE_URL } from '../../lib/site';
+
+const { slug } = Astro.params;
+const category = slug ? await getCategoryBySlug(env.DB, slug) : null;
+
+if (!category) {
+  return Astro.redirect('/404');
+}
+
+const [subcategories, platforms] = await Promise.all([
+  getSubcategoriesByCategory(env.DB, category.id),
+  getPlatformsInCategory(env.DB, category.id),
+]);
+const activeSubSlug = Astro.url.searchParams.get('sub') ?? '';
+const activeSubcategory = subcategories.find((s) => s.slug === activeSubSlug) ?? null;
+const activePlatform = Astro.url.searchParams.get('platform') ?? '';
+
+const page = Math.max(1, Number(Astro.url.searchParams.get('page') ?? '1') || 1);
+const { sites, total } = await getApprovedSitesByCategory(
+  env.DB,
+  category.id,
+  page,
+  activeSubcategory?.id,
+  platforms.includes(activePlatform) ? activePlatform : undefined
+);
+const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+const pageUrl = (params: { page?: number; sub?: string; platform?: string }) => {
+  const search = new URLSearchParams();
+  if (params.sub) search.set('sub', params.sub);
+  if (params.platform) search.set('platform', params.platform);
+  if (params.page && params.page > 1) search.set('page', String(params.page));
+  const qs = search.toString();
+  return `/category/${category.slug}${qs ? `?${qs}` : ''}`;
+};
+
+const description = category.description || `${category.name} 분야의 국내 웹사이트 모음`;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  name: `${category.name} 사이트 목록`,
+  url: new URL(`/category/${category.slug}`, SITE_URL).toString(),
+  itemListElement: sites.map((site, index) => ({
+    '@type': 'ListItem',
+    position: (page - 1) * PAGE_SIZE + index + 1,
+    url: new URL(`/site/${site.slug}`, SITE_URL).toString(),
+    name: site.name,
+  })),
+};
+---
+
+<Layout
+  title={category.name}
+  description={description}
+  canonicalPath={`/category/${category.slug}`}
+  jsonLd={jsonLd}
+>
+  <nav class="text-sm text-slate-400 mb-4">
+    <a href="/" class="hover:text-slate-600">홈</a> <span class="mx-1">/</span> {category.name}
+  </nav>
+
+  <h1 class="text-2xl font-bold text-slate-900">{category.name}</h1>
+  <p class="mt-2 text-slate-500">{description}</p>
+  <p class="mt-1 text-sm text-slate-400">{total}개 사이트</p>
+
+  {subcategories.length > 0 && (
+    <div class="mt-4 flex flex-wrap gap-2">
+      <a
+        href={pageUrl({ platform: activePlatform })}
+        class={`rounded-full px-3 py-1.5 text-sm border ${!activeSubcategory ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 text-slate-600 hover:border-slate-500'}`}
+      >
+        전체
+      </a>
+      {subcategories.map((sub) => (
+        <a
+          href={pageUrl({ sub: sub.slug, platform: activePlatform })}
+          class={`rounded-full px-3 py-1.5 text-sm border ${activeSubcategory?.id === sub.id ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 text-slate-600 hover:border-slate-500'}`}
+        >
+          {sub.name}
+        </a>
+      ))}
+    </div>
+  )}
+
+  {platforms.length > 0 && (
+    <div class="mt-2 flex flex-wrap items-center gap-2">
+      <span class="text-xs text-slate-400">플랫폼</span>
+      <a
+        href={pageUrl({ sub: activeSubcategory?.slug })}
+        class={`rounded-full px-3 py-1 text-xs border ${!activePlatform ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 text-slate-500 hover:border-slate-500'}`}
+      >
+        전체
+      </a>
+      {platforms.map((p) => (
+        <a
+          href={pageUrl({ sub: activeSubcategory?.slug, platform: p })}
+          class={`rounded-full px-3 py-1 text-xs border ${activePlatform === p ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 text-slate-500 hover:border-slate-500'}`}
+        >
+          {p}
+        </a>
+      ))}
+    </div>
+  )}
+
+  {sites.length === 0 ? (
+    <p class="mt-10 text-slate-400">아직 등록된 사이트가 없습니다. 첫 번째로 <a href="/submit" class="underline">사이트를 등록</a>해보세요.</p>
+  ) : (
+    <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {sites.map((site) => <SiteCard site={site} showCategory={false} />)}
+    </div>
+  )}
+
+  {totalPages > 1 && (
+    <nav class="mt-10 flex items-center justify-center gap-2 text-sm">
+      {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+        <a
+          href={pageUrl({ page: p, sub: activeSubcategory?.slug, platform: activePlatform })}
+          class={`rounded-md px-3 py-1.5 border ${p === page ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 text-slate-600 hover:border-slate-500'}`}
+        >
+          {p}
+        </a>
+      ))}
+    </nav>
+  )}
+</Layout>

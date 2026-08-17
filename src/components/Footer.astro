@@ -1,0 +1,26 @@
+---
+import { env } from 'cloudflare:workers';
+import { getCategories } from '../lib/db';
+import { SITE_NAME } from '../lib/site';
+
+const categories = await getCategories(env.DB);
+---
+
+<footer class="border-t border-slate-200 bg-white mt-12">
+  <div class="max-w-6xl mx-auto px-4 py-10">
+    <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3 text-sm">
+      {categories.map((category) => (
+        <a href={`/category/${category.slug}`} class="text-slate-600 hover:text-slate-900 hover:underline">
+          {category.name}
+        </a>
+      ))}
+    </div>
+    <div class="mt-8 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+      <p>&copy; {new Date().getFullYear()} {SITE_NAME}. All sites listed belong to their respective owners.</p>
+      <nav class="flex gap-4">
+        <a href="/submit" class="hover:text-slate-600">사이트 등록</a>
+        <a href="/search" class="hover:text-slate-600">검색</a>
+      </nav>
+    </div>
+  </div>
+</footer>

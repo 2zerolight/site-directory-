@@ -1,0 +1,414 @@
+---
+import { env } from 'cloudflare:workers';
+import Layout from '../layouts/Layout.astro';
+import FormSection from '../components/FormSection.astro';
+import { getCategories, getAllSubcategories, insertSiteSubmission } from '../lib/db';
+import { slugify } from '../lib/slugify';
+import { generateVerificationToken } from '../lib/verify';
+import { REGIONS, SITE_TYPES, PLATFORMS } from '../lib/constants';
+import type { Category, Subcategory } from '../types';
+
+const categories = await getCategories(env.DB);
+const subcategories = await getAllSubcategories(env.DB);
+const subcategoriesByCategory = new Map<number, Subcategory[]>();
+for (const sub of subcategories) {
+  const list = subcategoriesByCategory.get(sub.category_id) ?? [];
+  list.push(sub);
+  subcategoriesByCategory.set(sub.category_id, list);
+}
+
+type FormValues = {
+  name: string;
+  url: string;
+  tagline: string;
+  description: string;
+  logoUrl: string;
+  coverImageUrl: string;
+  categoryId: string;
+  subcategoryId: string;
+  region: string;
+  siteType: string;
+  platform: string;
+  mainKeywords: string;
+  serviceKeywords: string;
+  operatorName: string;
+  businessName: string;
+  serviceRegion: string;
+  customerCenter: string;
+  contactEmail: string;
+  blogUrl: string;
+  youtubeUrl: string;
+  instagramUrl: string;
+  facebookUrl: string;
+  otherSnsUrl: string;
+  email: string;
+};
+
+const emptyValues: FormValues = {
+  name: '', url: '', tagline: '', description: '', logoUrl: '', coverImageUrl: '',
+  categoryId: '', subcategoryId: '', region: '', siteType: '', platform: '',
+  mainKeywords: '', serviceKeywords: '',
+  operatorName: '', businessName: '', serviceRegion: '', customerCenter: '', contactEmail: '',
+  blogUrl: '', youtubeUrl: '', instagramUrl: '', facebookUrl: '', otherSnsUrl: '',
+  email: '',
+};
+
+let errorMessage = '';
+let formValues: FormValues = emptyValues;
+let redirectSlug = '';
+
+function normalizeRequiredUrl(raw: string): URL | null {
+  try {
+    const u = new URL(raw.trim());
+    return ['http:', 'https:'].includes(u.protocol) ? u : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeOptionalUrl(raw: string): { ok: boolean; value: string | null } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { ok: true, value: null };
+  try {
+    const u = new URL(trimmed);
+    return ['http:', 'https:'].includes(u.protocol) ? { ok: true, value: u.toString() } : { ok: false, value: null };
+  } catch {
+    return { ok: false, value: null };
+  }
+}
+
+if (Astro.request.method === 'POST') {
+  const data = await Astro.request.formData();
+  const get = (key: string) => String(data.get(key) ?? '').trim();
+  const honeypot = get('website');
+
+  formValues = {
+    name: get('name'), url: get('url'), tagline: get('tagline'), description: get('description'),
+    logoUrl: get('logoUrl'), coverImageUrl: get('coverImageUrl'),
+    categoryId: get('categoryId'), subcategoryId: get('subcategoryId'), region: get('region'), siteType: get('siteType'), platform: get('platform'),
+    mainKeywords: get('mainKeywords'), serviceKeywords: get('serviceKeywords'),
+    operatorName: get('operatorName'), businessName: get('businessName'), serviceRegion: get('serviceRegion'),
+    customerCenter: get('customerCenter'), contactEmail: get('contactEmail'),
+    blogUrl: get('blogUrl'), youtubeUrl: get('youtubeUrl'), instagramUrl: get('instagramUrl'),
+    facebookUrl: get('facebookUrl'), otherSnsUrl: get('otherSnsUrl'),
+    email: get('email'),
+  };
+
+  const categoryId = Number(formValues.categoryId || '');
+  const subcategoryId = formValues.subcategoryId ? Number(formValues.subcategoryId) : null;
+  const category = categories.find((c) => c.id === categoryId);
+  const subcategory = subcategoryId ? subcategories.find((s) => s.id === subcategoryId) : null;
+
+  const normalizedUrl = normalizeRequiredUrl(formValues.url);
+  const logo = normalizeOptionalUrl(formValues.logoUrl);
+  const cover = normalizeOptionalUrl(formValues.coverImageUrl);
+  const blog = normalizeOptionalUrl(formValues.blogUrl);
+  const youtube = normalizeOptionalUrl(formValues.youtubeUrl);
+  const instagram = normalizeOptionalUrl(formValues.instagramUrl);
+  const facebook = normalizeOptionalUrl(formValues.facebookUrl);
+  const otherSns = normalizeOptionalUrl(formValues.otherSnsUrl);
+
+  if (honeypot) {
+    // Silently accept bots without writing anything, so they don't learn to adapt.
+    redirectSlug = '__bot__';
+  } else if (!formValues.name || formValues.name.length > 100) {
+    errorMessage = '사이트 이름을 입력해주세요 (100자 이내).';
+  } else if (!normalizedUrl) {
+    errorMessage = '올바른 사이트 URL을 입력해주세요 (http:// 또는 https://).';
+  } else if (!formValues.tagline || formValues.tagline.length > 120) {
+    errorMessage = '한 줄 소개를 입력해주세요 (120자 이내).';
+  } else if (!formValues.description || formValues.description.length > 2000) {
+    errorMessage = '상세 설명을 입력해주세요 (2000자 이내).';
+  } else if (!category) {
+    errorMessage = '대분류를 선택해주세요.';
+  } else if (subcategory && subcategory.category_id !== category.id) {
+    errorMessage = '선택한 중분류가 대분류와 일치하지 않습니다.';
+  } else if (formValues.region && !REGIONS.includes(formValues.region as (typeof REGIONS)[number])) {
+    errorMessage = '올바른 지역을 선택해주세요.';
+  } else if (formValues.siteType && !SITE_TYPES.includes(formValues.siteType as (typeof SITE_TYPES)[number])) {
+    errorMessage = '올바른 사이트 유형을 선택해주세요.';
+  } else if (formValues.platform && !PLATFORMS.includes(formValues.platform as (typeof PLATFORMS)[number])) {
+    errorMessage = '올바른 플랫폼을 선택해주세요.';
+  } else if (!logo.ok || !cover.ok || !blog.ok || !youtube.ok || !instagram.ok || !facebook.ok || !otherSns.ok) {
+    errorMessage = '이미지·SNS URL 형식을 확인해주세요 (http:// 또는 https://).';
+  } else {
+    const token = generateVerificationToken();
+    const slug = slugify(formValues.name);
+    await insertSiteSubmission(env.DB, {
+      slug,
+      name: formValues.name,
+      url: normalizedUrl.toString(),
+      tagline: formValues.tagline,
+      description: formValues.description,
+      logoUrl: logo.value,
+      coverImageUrl: cover.value,
+      categoryId: category.id,
+      subcategoryId: subcategory ? subcategory.id : null,
+      region: formValues.region || null,
+      siteType: formValues.siteType || null,
+      platform: formValues.platform || null,
+      mainKeywords: formValues.mainKeywords || null,
+      serviceKeywords: formValues.serviceKeywords || null,
+      operatorName: formValues.operatorName || null,
+      businessName: formValues.businessName || null,
+      serviceRegion: formValues.serviceRegion || null,
+      customerCenter: formValues.customerCenter || null,
+      contactEmail: formValues.contactEmail || null,
+      blogUrl: blog.value,
+      youtubeUrl: youtube.value,
+      instagramUrl: instagram.value,
+      facebookUrl: facebook.value,
+      otherSnsUrl: otherSns.value,
+      verificationToken: token,
+      submittedEmail: formValues.email || null,
+    });
+    redirectSlug = slug;
+  }
+}
+
+if (redirectSlug === '__bot__') {
+  return Astro.redirect('/submit');
+}
+if (redirectSlug) {
+  return Astro.redirect(`/submit/verify/${redirectSlug}`);
+}
+
+const inputClass =
+  'mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-slate-900 focus:bg-white focus:outline-none focus:ring-4 focus:ring-slate-900/5';
+const labelClass = 'flex items-baseline justify-between text-sm font-medium text-slate-800';
+const hintClass = 'mt-1.5 text-xs text-slate-400';
+---
+
+<Layout
+  title="사이트 등록"
+  description="분야에 맞는 카테고리를 선택해 여러분의 사이트를 등록해보세요."
+  canonicalPath="/submit"
+>
+  <div class="mx-auto max-w-2xl">
+    <h1 class="text-3xl font-bold tracking-tight text-slate-900">사이트 등록</h1>
+    <p class="mt-2 text-slate-500">등록 요청은 검토 후 승인되면 디렉토리에 노출됩니다.</p>
+
+    <ol class="mt-6 flex items-center gap-2 text-xs text-slate-400 sm:text-sm">
+      <li class="flex items-center gap-2 font-semibold text-slate-900">
+        <span class="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-[11px] text-white">1</span>
+        정보 입력
+      </li>
+      <li class="h-px flex-1 bg-slate-200"></li>
+      <li class="flex items-center gap-2">
+        <span class="flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-[11px] text-slate-400">2</span>
+        소유권 인증
+      </li>
+      <li class="h-px flex-1 bg-slate-200"></li>
+      <li class="flex items-center gap-2">
+        <span class="flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-[11px] text-slate-400">3</span>
+        승인 및 노출
+      </li>
+    </ol>
+
+    {errorMessage && (
+      <div class="mt-6 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+        <span class="mt-0.5">⚠</span>
+        <span>{errorMessage}</span>
+      </div>
+    )}
+
+    <form method="post" class="mt-8 space-y-6">
+      <FormSection index={1} title="기본정보" description="사이트의 핵심 정보를 입력해주세요.">
+        <div>
+          <label class={labelClass} for="name"><span>사이트 이름<span class="ml-0.5 text-rose-500">*</span></span></label>
+          <input id="name" name="name" type="text" required maxlength="100" value={formValues.name} class={inputClass} />
+        </div>
+
+        <div>
+          <label class={labelClass} for="url"><span>사이트 URL<span class="ml-0.5 text-rose-500">*</span></span></label>
+          <input id="url" name="url" type="url" required placeholder="https://example.com" value={formValues.url} class={inputClass} />
+        </div>
+
+        <div>
+          <label class={labelClass} for="tagline">
+            <span>한 줄 소개<span class="ml-0.5 text-rose-500">*</span></span>
+            <span id="tagline-count" class="font-normal text-slate-400">0/120</span>
+          </label>
+          <input id="tagline" name="tagline" type="text" required maxlength="120" value={formValues.tagline} class={inputClass} placeholder="사이트를 한 문장으로 소개해주세요" />
+        </div>
+
+        <div>
+          <label class={labelClass} for="description">
+            <span>상세 설명<span class="ml-0.5 text-rose-500">*</span></span>
+            <span id="description-count" class="font-normal text-slate-400">0/2000</span>
+          </label>
+          <textarea id="description" name="description" required maxlength="2000" rows="5" class={inputClass}>{formValues.description}</textarea>
+        </div>
+
+        <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div>
+            <label class={labelClass} for="logoUrl"><span>로고 이미지 URL</span></label>
+            <input id="logoUrl" name="logoUrl" type="url" value={formValues.logoUrl} class={inputClass} placeholder="https://" />
+          </div>
+          <div>
+            <label class={labelClass} for="coverImageUrl"><span>대표 이미지 URL</span></label>
+            <input id="coverImageUrl" name="coverImageUrl" type="url" value={formValues.coverImageUrl} class={inputClass} placeholder="https://" />
+          </div>
+        </div>
+      </FormSection>
+
+      <FormSection index={2} title="분류" description="방문자가 카테고리로 사이트를 찾을 수 있도록 분류해주세요.">
+        <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div>
+            <label class={labelClass} for="categoryId"><span>대분류<span class="ml-0.5 text-rose-500">*</span></span></label>
+            <select id="categoryId" name="categoryId" required class={inputClass}>
+              <option value="">선택해주세요</option>
+              {categories.map((c: Category) => (
+                <option value={c.id} selected={String(c.id) === formValues.categoryId}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label class={labelClass} for="subcategoryId"><span>중분류</span></label>
+            <select id="subcategoryId" name="subcategoryId" class={inputClass}>
+              <option value="">선택 안 함</option>
+              {categories.map((c: Category) => (
+                <optgroup label={c.name}>
+                  {(subcategoriesByCategory.get(c.id) ?? []).map((sub) => (
+                    <option value={sub.id} selected={String(sub.id) === formValues.subcategoryId}>{sub.name}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <p class={hintClass}>선택한 대분류에 속한 중분류를 골라주세요.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div>
+            <label class={labelClass} for="region"><span>지역</span></label>
+            <select id="region" name="region" class={inputClass}>
+              <option value="">선택 안 함</option>
+              {REGIONS.map((r) => <option value={r} selected={r === formValues.region}>{r}</option>)}
+            </select>
+          </div>
+          <div>
+            <label class={labelClass} for="siteType"><span>사이트 유형</span></label>
+            <select id="siteType" name="siteType" class={inputClass}>
+              <option value="">선택 안 함</option>
+              {SITE_TYPES.map((t) => <option value={t} selected={t === formValues.siteType}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class={labelClass} for="platform"><span>플랫폼</span></label>
+          <select id="platform" name="platform" class={inputClass}>
+            <option value="">선택 안 함</option>
+            {PLATFORMS.map((p) => <option value={p} selected={p === formValues.platform}>{p}</option>)}
+          </select>
+          <p class={hintClass}>SNS 계정 등록 시 사용 중인 플랫폼을 선택해주세요.</p>
+        </div>
+      </FormSection>
+
+      <FormSection index={3} title="검색" description="검색과 추천에 활용될 키워드를 알려주세요.">
+        <div>
+          <label class={labelClass} for="mainKeywords"><span>주요 키워드</span></label>
+          <input id="mainKeywords" name="mainKeywords" type="text" value={formValues.mainKeywords} class={inputClass} placeholder="쉼표로 구분해서 입력 (예: 웹개발, 튜토리얼)" />
+        </div>
+        <div>
+          <label class={labelClass} for="serviceKeywords"><span>서비스 키워드 (주요 서비스)</span></label>
+          <input id="serviceKeywords" name="serviceKeywords" type="text" value={formValues.serviceKeywords} class={inputClass} placeholder="쉼표로 구분해서 입력 (예: 온라인 강의, 1:1 코칭)" />
+        </div>
+      </FormSection>
+
+      <FormSection index={4} title="운영" description="선택 사항이며, 입력할수록 방문자 신뢰도가 높아집니다.">
+        <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div>
+            <label class={labelClass} for="operatorName"><span>운영 주체</span></label>
+            <input id="operatorName" name="operatorName" type="text" value={formValues.operatorName} class={inputClass} />
+          </div>
+          <div>
+            <label class={labelClass} for="businessName"><span>사업자명</span></label>
+            <input id="businessName" name="businessName" type="text" value={formValues.businessName} class={inputClass} />
+          </div>
+        </div>
+
+        <div>
+          <label class={labelClass} for="serviceRegion"><span>서비스 지역</span></label>
+          <input id="serviceRegion" name="serviceRegion" type="text" value={formValues.serviceRegion} class={inputClass} placeholder="예: 전국, 서울/경기 중심" />
+        </div>
+
+        <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div>
+            <label class={labelClass} for="customerCenter"><span>고객센터</span></label>
+            <input id="customerCenter" name="customerCenter" type="text" value={formValues.customerCenter} class={inputClass} placeholder="예: 1588-0000 (평일 9-18시)" />
+          </div>
+          <div>
+            <label class={labelClass} for="contactEmail"><span>공개 이메일</span></label>
+            <input id="contactEmail" name="contactEmail" type="email" value={formValues.contactEmail} class={inputClass} />
+          </div>
+        </div>
+      </FormSection>
+
+      <FormSection index={5} title="외부 채널" description="운영 중인 SNS 채널이 있다면 연결해주세요.">
+        <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div>
+            <label class={labelClass} for="blogUrl"><span>블로그</span></label>
+            <input id="blogUrl" name="blogUrl" type="url" value={formValues.blogUrl} class={inputClass} placeholder="https://" />
+          </div>
+          <div>
+            <label class={labelClass} for="youtubeUrl"><span>유튜브</span></label>
+            <input id="youtubeUrl" name="youtubeUrl" type="url" value={formValues.youtubeUrl} class={inputClass} placeholder="https://" />
+          </div>
+          <div>
+            <label class={labelClass} for="instagramUrl"><span>인스타그램</span></label>
+            <input id="instagramUrl" name="instagramUrl" type="url" value={formValues.instagramUrl} class={inputClass} placeholder="https://" />
+          </div>
+          <div>
+            <label class={labelClass} for="facebookUrl"><span>페이스북</span></label>
+            <input id="facebookUrl" name="facebookUrl" type="url" value={formValues.facebookUrl} class={inputClass} placeholder="https://" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class={labelClass} for="otherSnsUrl"><span>기타 SNS</span></label>
+            <input id="otherSnsUrl" name="otherSnsUrl" type="url" value={formValues.otherSnsUrl} class={inputClass} placeholder="https://" />
+          </div>
+        </div>
+      </FormSection>
+
+      <FormSection index={6} title="제출자 연락처" description="검수 관련 안내를 받을 연락처입니다. 사이트에는 노출되지 않습니다.">
+        <div>
+          <label class={labelClass} for="email"><span>연락용 이메일 (선택)</span></label>
+          <input id="email" name="email" type="email" value={formValues.email} class={inputClass} />
+        </div>
+      </FormSection>
+
+      <div class="hidden" aria-hidden="true">
+        <label for="website">Website</label>
+        <input id="website" name="website" type="text" tabindex="-1" autocomplete="off" />
+      </div>
+
+      <div class="sticky bottom-4 z-10 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur">
+        <div class="flex items-center justify-between gap-4">
+          <p class="hidden text-xs text-slate-400 sm:block">제출 후 소유권 인증 페이지로 자동 이동합니다.</p>
+          <button
+            type="submit"
+            class="ml-auto rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 active:scale-[0.98]"
+          >
+            제출하기 →
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    function bindCounter(inputId: string, countId: string, max: number) {
+      const input = document.getElementById(inputId) as HTMLInputElement | HTMLTextAreaElement | null;
+      const count = document.getElementById(countId);
+      if (!input || !count) return;
+      const update = () => {
+        count.textContent = `${input.value.length}/${max}`;
+      };
+      input.addEventListener('input', update);
+      update();
+    }
+    bindCounter('tagline', 'tagline-count', 120);
+    bindCounter('description', 'description-count', 2000);
+  </script>
+</Layout>

@@ -1,0 +1,65 @@
+INSERT INTO sites (
+  slug, name, url, tagline, description, logo_url, cover_image_url,
+  category_id, subcategory_id, region, site_type,
+  main_keywords, service_keywords,
+  operator_name, business_name, service_region, customer_center, contact_email,
+  blog_url, youtube_url, instagram_url, facebook_url, other_sns_url,
+  http_status, is_https, ownership_verified, verification_method, last_checked_at, verified_at,
+  status, submitted_email, view_count, click_count, created_at, updated_at, approved_at
+) VALUES
+(
+  'example-dev-blog', '예제 개발 블로그', 'https://example.com/dev',
+  '실무 웹 개발 노하우를 나누는 기술 블로그',
+  '프론트엔드와 백엔드를 아우르는 실전 개발 튜토리얼, 트러블슈팅 기록, 오픈소스 프로젝트 소개를 정기적으로 발행하는 블로그입니다.',
+  'https://example.com/dev/logo.png', 'https://example.com/dev/cover.png',
+  (SELECT id FROM categories WHERE slug = 'it-development'),
+  (SELECT id FROM subcategories WHERE slug = 'dev-tools' AND category_id = (SELECT id FROM categories WHERE slug = 'it-development')),
+  '전국', '블로그',
+  '웹개발, 프론트엔드, 백엔드, 튜토리얼', '기술 아티클 발행, 코드 예제 제공, 오픈소스 큐레이션',
+  '예제개발블로그 운영팀', NULL, '전국 어디서나 온라인으로 이용 가능', NULL, 'contact@example.com',
+  'https://example.com/dev/blog', NULL, 'https://instagram.com/example_dev', NULL, NULL,
+  200, 1, 1, 'meta_tag', datetime('now', '-1 days'), datetime('now', '-5 days'),
+  'approved', 'owner@example.com', 120, 45, datetime('now', '-5 days'), datetime('now', '-1 days'), datetime('now', '-5 days')
+),
+(
+  'example-shop', '예제 쇼핑몰', 'https://example.com/shop',
+  '생활용품을 합리적인 가격에 만나는 온라인 쇼핑몰',
+  '주방용품부터 욕실용품까지 엄선한 생활용품을 매주 특가로 선보이는 온라인 쇼핑몰입니다. 전국 익일배송을 지원합니다.',
+  'https://example.com/shop/logo.png', 'https://example.com/shop/cover.png',
+  (SELECT id FROM categories WHERE slug = 'shopping'),
+  (SELECT id FROM subcategories WHERE slug = 'general-mall' AND category_id = (SELECT id FROM categories WHERE slug = 'shopping')),
+  '전국', '쇼핑몰',
+  '생활용품, 온라인쇼핑, 특가', '주방용품 판매, 욕실용품 판매, 전국 익일배송',
+  '예제커머스 주식회사', '예제커머스(주)', '전국 (익일배송)', '1588-0000 (평일 09:00~18:00)', 'cs@example.com',
+  NULL, 'https://youtube.com/@exampleshop', 'https://instagram.com/example_shop', 'https://facebook.com/exampleshop', NULL,
+  200, 1, 1, 'dns_txt', datetime('now', '-1 days'), datetime('now', '-3 days'),
+  'approved', 'owner@example.com', 340, 210, datetime('now', '-3 days'), datetime('now', '-1 days'), datetime('now', '-3 days')
+),
+(
+  'example-news', '예제 뉴스', 'https://example.com/news',
+  'IT와 스타트업 소식을 가장 빠르게 전하는 뉴스',
+  'IT 업계 동향, 스타트업 투자 소식, 신제품 리뷰를 매일 업데이트하는 전문 뉴스 미디어입니다.',
+  NULL, NULL,
+  (SELECT id FROM categories WHERE slug = 'news-media'),
+  (SELECT id FROM subcategories WHERE slug = 'it-tech-news' AND category_id = (SELECT id FROM categories WHERE slug = 'news-media')),
+  '전국', '뉴스/미디어',
+  'IT뉴스, 스타트업, 테크', '속보 발행, 심층 인터뷰, 업계 리포트',
+  '예제미디어', NULL, '전국', NULL, 'news@example.com',
+  NULL, NULL, NULL, NULL, NULL,
+  200, 1, 0, NULL, datetime('now', '-1 days'), NULL,
+  'approved', 'owner@example.com', 89, 30, datetime('now', '-1 days'), datetime('now', '-1 days'), datetime('now', '-1 days')
+),
+(
+  'example-pending-site', '검토 대기 사이트', 'https://example.com/pending',
+  '아직 관리자 승인을 기다리고 있는 예제 사이트',
+  '이 사이트는 제출은 완료되었지만 아직 관리자 검수를 통과하지 못한 예제 데이터입니다.',
+  NULL, NULL,
+  (SELECT id FROM categories WHERE slug = 'lifestyle'),
+  (SELECT id FROM subcategories WHERE slug = 'interior-living' AND category_id = (SELECT id FROM categories WHERE slug = 'lifestyle')),
+  '서울', '블로그',
+  '라이프스타일, 인테리어', '인테리어 팁 공유',
+  NULL, NULL, NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL, NULL,
+  NULL, NULL, 0, NULL, NULL, NULL,
+  'pending', 'submitter@example.com', 0, 0, datetime('now'), datetime('now'), NULL
+);
