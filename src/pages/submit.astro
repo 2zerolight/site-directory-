@@ -221,7 +221,17 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
 
         <div>
           <label class={labelClass} for="url"><span>사이트 URL<span class="ml-0.5 text-rose-500">*</span></span></label>
-          <input id="url" name="url" type="url" required placeholder="https://example.com" value={formValues.url} class={inputClass} />
+          <div class="mt-1.5 flex gap-2">
+            <input id="url" name="url" type="url" required placeholder="https://example.com" value={formValues.url} class={`${inputClass} mt-0 flex-1`} />
+            <button
+              type="button"
+              id="autofill-btn"
+              class="shrink-0 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              자동 채우기
+            </button>
+          </div>
+          <p id="autofill-status" class={`${hintClass} hidden`}></p>
         </div>
 
         <div>
@@ -410,5 +420,57 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
     }
     bindCounter('tagline', 'tagline-count', 120);
     bindCounter('description', 'description-count', 2000);
+
+    const autofillBtn = document.getElementById('autofill-btn') as HTMLButtonElement | null;
+    const autofillStatus = document.getElementById('autofill-status');
+    const urlInput = document.getElementById('url') as HTMLInputElement | null;
+
+    function fillIfEmpty(id: string, value: string | null | undefined) {
+      if (!value) return;
+      const el = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
+      if (el && !el.value.trim()) {
+        el.value = value;
+        el.dispatchEvent(new Event('input'));
+      }
+    }
+
+    autofillBtn?.addEventListener('click', async () => {
+      const url = urlInput?.value.trim();
+      if (!url) {
+        urlInput?.focus();
+        return;
+      }
+      if (!autofillStatus) return;
+      autofillStatus.classList.remove('hidden');
+      autofillStatus.textContent = '사이트 정보를 불러오는 중...';
+      autofillBtn.disabled = true;
+
+      try {
+        const res = await fetch(`/api/fetch-meta?url=${encodeURIComponent(url)}`);
+        const data = (await res.json()) as {
+          ok: boolean;
+          error?: string;
+          name?: string;
+          tagline?: string;
+          description?: string;
+          logoUrl?: string | null;
+        };
+        if (!data.ok) {
+          autofillStatus.textContent = data.error ?? '정보를 불러오지 못했습니다. 직접 입력해주세요.';
+          return;
+        }
+        fillIfEmpty('name', data.name);
+        fillIfEmpty('tagline', data.tagline);
+        fillIfEmpty('description', data.description);
+        fillIfEmpty('logoUrl', data.logoUrl);
+        autofillStatus.textContent = data.logoUrl
+          ? '이름·소개·설명·로고를 자동으로 채웠어요. 내용을 확인 후 필요한 부분을 수정해주세요.'
+          : '이름·소개·설명을 자동으로 채웠어요 (로고는 찾지 못했어요). 내용을 확인 후 필요한 부분을 수정해주세요.';
+      } catch {
+        autofillStatus.textContent = '정보를 불러오지 못했습니다. 직접 입력해주세요.';
+      } finally {
+        autofillBtn.disabled = false;
+      }
+    });
   </script>
 </Layout>
