@@ -17,7 +17,7 @@ for (const sub of subcategories) {
   list.push(sub);
   subcategoriesByCategory.set(sub.category_id, list);
 }
-const snsCategoryId = categories.find((c) => c.slug === 'sns-celebrity')?.id ?? null;
+const snsCategoryId = categories.find((c) => c.slug === 'sns-creator')?.id ?? null;
 
 type FormValues = {
   name: string;
