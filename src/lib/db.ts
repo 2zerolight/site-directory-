@@ -1,4 +1,4 @@
-import type { Category, CategoryWithCount, Site, SiteWithCategory, Subcategory } from '../types';
+import type { Category, CategoryWithCount, Review, ReviewWithSite, Site, SiteWithCategory, Subcategory, Tag } from '../types';
 
 const PAGE_SIZE = 24;
 export { PAGE_SIZE };
@@ -202,8 +202,8 @@ export interface SitemapCategory {
 
 export async function getSitemapData(
   db: D1Database
-): Promise<{ sites: SitemapSite[]; categories: SitemapCategory[] }> {
-  const [sites, categories] = await Promise.all([
+): Promise<{ sites: SitemapSite[]; categories: SitemapCategory[]; tags: SitemapCategory[] }> {
+  const [sites, categories, tags] = await Promise.all([
     db.prepare(`SELECT slug, updated_at FROM sites WHERE status = 'approved'`).all<SitemapSite>(),
     db
       .prepare(
@@ -213,8 +213,17 @@ export async function getSitemapData(
          GROUP BY c.id`
       )
       .all<SitemapCategory>(),
+    db
+      .prepare(
+        `SELECT t.slug AS slug, MAX(s.updated_at) AS last_update
+         FROM tags t
+         JOIN site_tags st ON st.tag_id = t.id
+         JOIN sites s ON s.id = st.site_id AND s.status = 'approved'
+         GROUP BY t.id`
+      )
+      .all<SitemapCategory>(),
   ]);
-  return { sites: sites.results, categories: categories.results };
+  return { sites: sites.results, categories: categories.results, tags: tags.results };
 }
 
 export async function getPendingSites(db: D1Database): Promise<SiteWithCategory[]> {
@@ -484,6 +493,261 @@ export async function incrementViewCount(db: D1Database, id: number): Promise<vo
 
 export async function incrementClickCount(db: D1Database, id: number): Promise<void> {
   await db.prepare('UPDATE sites SET click_count = click_count + 1 WHERE id = ?').bind(id).run();
+}
+
+// ---- Tags ----
+
+function tagSlugify(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+}
+
+export async function getTagBySlug(db: D1Database, slug: string): Promise<Tag | null> {
+  const row = await db.prepare('SELECT * FROM tags WHERE slug = ?').bind(slug).first<Tag>();
+  return row ?? null;
+}
+
+export async function getTagsForSite(db: D1Database, siteId: number): Promise<Tag[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT t.* FROM tags t JOIN site_tags st ON st.tag_id = t.id WHERE st.site_id = ? ORDER BY t.name ASC`
+    )
+    .bind(siteId)
+    .all<Tag>();
+  return results;
+}
+
+export async function getPopularTags(db: D1Database, limit = 20): Promise<(Tag & { site_count: number })[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT t.*, COUNT(st.site_id) AS site_count
+       FROM tags t
+       JOIN site_tags st ON st.tag_id = t.id
+       JOIN sites s ON s.id = st.site_id AND s.status = 'approved'
+       GROUP BY t.id
+       ORDER BY site_count DESC, t.name ASC
+       LIMIT ?`
+    )
+    .bind(limit)
+    .all<Tag & { site_count: number }>();
+  return results;
+}
+
+export async function getApprovedSitesByTag(
+  db: D1Database,
+  tagSlug: string,
+  page: number
+): Promise<{ sites: SiteWithCategory[]; total: number; tag: Tag | null }> {
+  const tag = await getTagBySlug(db, tagSlug);
+  if (!tag) return { sites: [], total: 0, tag: null };
+
+  const offset = (page - 1) * PAGE_SIZE;
+  const [listResult, countResult] = await Promise.all([
+    db
+      .prepare(
+        `SELECT ${SITE_WITH_CATEGORY_SELECT} ${SITE_WITH_CATEGORY_JOIN}
+         JOIN site_tags st ON st.site_id = s.id
+         WHERE st.tag_id = ? AND s.status = 'approved'
+         ORDER BY s.view_count DESC, s.created_at DESC
+         LIMIT ? OFFSET ?`
+      )
+      .bind(tag.id, PAGE_SIZE, offset)
+      .all<SiteWithCategory>(),
+    db
+      .prepare(`SELECT COUNT(*) AS n FROM site_tags st JOIN sites s ON s.id = st.site_id WHERE st.tag_id = ? AND s.status = 'approved'`)
+      .bind(tag.id)
+      .first<{ n: number }>(),
+  ]);
+
+  return { sites: listResult.results, total: countResult?.n ?? 0, tag };
+}
+
+export async function setSiteTags(db: D1Database, siteId: number, tagNames: string[]): Promise<void> {
+  const cleanNames = [...new Set(tagNames.map((n) => n.trim()).filter(Boolean))].slice(0, 15);
+
+  const tagIds: number[] = [];
+  for (const name of cleanNames) {
+    const existing = await db.prepare('SELECT id FROM tags WHERE name = ?').bind(name).first<{ id: number }>();
+    if (existing) {
+      tagIds.push(existing.id);
+      continue;
+    }
+    let slug = tagSlugify(name) || 'tag';
+    let attempt = 0;
+    while (await db.prepare('SELECT 1 FROM tags WHERE slug = ?').bind(slug).first()) {
+      attempt += 1;
+      slug = `${tagSlugify(name) || 'tag'}-${attempt}`;
+    }
+    const result = await db.prepare('INSERT INTO tags (slug, name) VALUES (?, ?)').bind(slug, name).run();
+    tagIds.push(result.meta.last_row_id);
+  }
+
+  await db.prepare('DELETE FROM site_tags WHERE site_id = ?').bind(siteId).run();
+  for (const tagId of tagIds) {
+    await db.prepare('INSERT INTO site_tags (site_id, tag_id) VALUES (?, ?)').bind(siteId, tagId).run();
+  }
+}
+
+// ---- Reviews ----
+
+export interface ReviewInput {
+  siteId: number;
+  rating: number;
+  authorName: string | null;
+  comment: string;
+}
+
+export async function insertReview(db: D1Database, data: ReviewInput): Promise<void> {
+  await db
+    .prepare(`INSERT INTO reviews (site_id, rating, author_name, comment, status) VALUES (?, ?, ?, ?, 'pending')`)
+    .bind(data.siteId, data.rating, data.authorName, data.comment)
+    .run();
+}
+
+export async function getApprovedReviewsForSite(db: D1Database, siteId: number): Promise<Review[]> {
+  const { results } = await db
+    .prepare(`SELECT * FROM reviews WHERE site_id = ? AND status = 'approved' ORDER BY created_at DESC`)
+    .bind(siteId)
+    .all<Review>();
+  return results;
+}
+
+export async function getReviewStats(db: D1Database, siteId: number): Promise<{ avg: number; count: number }> {
+  const row = await db
+    .prepare(`SELECT AVG(rating) AS avg, COUNT(*) AS count FROM reviews WHERE site_id = ? AND status = 'approved'`)
+    .bind(siteId)
+    .first<{ avg: number | null; count: number }>();
+  return { avg: row?.avg ?? 0, count: row?.count ?? 0 };
+}
+
+export async function getPendingReviews(db: D1Database): Promise<ReviewWithSite[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT r.*, s.name AS site_name, s.slug AS site_slug
+       FROM reviews r JOIN sites s ON s.id = r.site_id
+       WHERE r.status = 'pending'
+       ORDER BY r.created_at ASC`
+    )
+    .all<ReviewWithSite>();
+  return results;
+}
+
+export async function setReviewStatus(db: D1Database, id: number, status: 'approved' | 'rejected'): Promise<void> {
+  await db.prepare('UPDATE reviews SET status = ? WHERE id = ?').bind(status, id).run();
+}
+
+// ---- Bookmarks ----
+
+export async function getSitesByIds(db: D1Database, ids: number[]): Promise<SiteWithCategory[]> {
+  if (ids.length === 0) return [];
+  const placeholders = ids.map(() => '?').join(',');
+  const { results } = await db
+    .prepare(
+      `SELECT ${SITE_WITH_CATEGORY_SELECT} ${SITE_WITH_CATEGORY_JOIN}
+       WHERE s.id IN (${placeholders}) AND s.status = 'approved'`
+    )
+    .bind(...ids)
+    .all<SiteWithCategory>();
+  return results;
+}
+
+// ---- Search suggestions ----
+
+export interface SearchSuggestion {
+  id: number;
+  name: string;
+  slug: string;
+  logo_url: string | null;
+  category_name: string;
+}
+
+export async function searchSiteSuggestions(db: D1Database, query: string, limit = 6): Promise<SearchSuggestion[]> {
+  const like = `%${query}%`;
+  const { results } = await db
+    .prepare(
+      `SELECT s.id, s.name, s.slug, s.logo_url, c.name AS category_name
+       FROM sites s JOIN categories c ON c.id = s.category_id
+       WHERE s.status = 'approved' AND s.name LIKE ?
+       ORDER BY s.view_count DESC
+       LIMIT ?`
+    )
+    .bind(like, limit)
+    .all<SearchSuggestion>();
+  return results;
+}
+
+// ---- Admin stats ----
+
+export interface DashboardStats {
+  totalApproved: number;
+  totalPending: number;
+  totalRejected: number;
+  categoryBreakdown: { name: string; slug: string; count: number }[];
+  topByViews: SiteWithCategory[];
+  topByClicks: SiteWithCategory[];
+  recentlyAdded: SiteWithCategory[];
+  pendingReviewsCount: number;
+  staleSitesCount: number;
+}
+
+export async function getDashboardStats(db: D1Database): Promise<DashboardStats> {
+  const [statusCounts, categoryBreakdown, topByViews, topByClicks, recentlyAdded, pendingReviews, staleSites] =
+    await Promise.all([
+      db.prepare(`SELECT status, COUNT(*) AS n FROM sites GROUP BY status`).all<{ status: string; n: number }>(),
+      db
+        .prepare(
+          `SELECT c.name, c.slug, COUNT(s.id) AS count
+           FROM categories c LEFT JOIN sites s ON s.category_id = c.id AND s.status = 'approved'
+           GROUP BY c.id ORDER BY c.sort_order ASC`
+        )
+        .all<{ name: string; slug: string; count: number }>(),
+      db
+        .prepare(`SELECT ${SITE_WITH_CATEGORY_SELECT} ${SITE_WITH_CATEGORY_JOIN} WHERE s.status = 'approved' ORDER BY s.view_count DESC LIMIT 10`)
+        .all<SiteWithCategory>(),
+      db
+        .prepare(`SELECT ${SITE_WITH_CATEGORY_SELECT} ${SITE_WITH_CATEGORY_JOIN} WHERE s.status = 'approved' ORDER BY s.click_count DESC LIMIT 10`)
+        .all<SiteWithCategory>(),
+      db
+        .prepare(`SELECT ${SITE_WITH_CATEGORY_SELECT} ${SITE_WITH_CATEGORY_JOIN} WHERE s.status = 'approved' ORDER BY s.created_at DESC LIMIT 10`)
+        .all<SiteWithCategory>(),
+      db.prepare(`SELECT COUNT(*) AS n FROM reviews WHERE status = 'pending'`).first<{ n: number }>(),
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM sites WHERE status = 'approved' AND (last_checked_at IS NULL OR last_checked_at < datetime('now', '-30 days'))`
+        )
+        .first<{ n: number }>(),
+    ]);
+
+  const byStatus = Object.fromEntries(statusCounts.results.map((r) => [r.status, r.n]));
+
+  return {
+    totalApproved: byStatus.approved ?? 0,
+    totalPending: byStatus.pending ?? 0,
+    totalRejected: byStatus.rejected ?? 0,
+    categoryBreakdown: categoryBreakdown.results,
+    topByViews: topByViews.results,
+    topByClicks: topByClicks.results,
+    recentlyAdded: recentlyAdded.results,
+    pendingReviewsCount: pendingReviews?.n ?? 0,
+    staleSitesCount: staleSites?.n ?? 0,
+  };
+}
+
+export async function getStaleApprovedSites(db: D1Database, limit = 20): Promise<SiteWithCategory[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT ${SITE_WITH_CATEGORY_SELECT} ${SITE_WITH_CATEGORY_JOIN}
+       WHERE s.status = 'approved'
+       ORDER BY CASE WHEN s.last_checked_at IS NULL THEN 0 ELSE 1 END, s.last_checked_at ASC
+       LIMIT ?`
+    )
+    .bind(limit)
+    .all<SiteWithCategory>();
+  return results;
 }
 
 export { type Site };

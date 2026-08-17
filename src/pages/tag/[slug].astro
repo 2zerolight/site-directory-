@@ -1,0 +1,62 @@
+---
+import { env } from 'cloudflare:workers';
+import Layout from '../../layouts/Layout.astro';
+import SiteCard from '../../components/SiteCard.astro';
+import { getApprovedSitesByTag, PAGE_SIZE } from '../../lib/db';
+import { SITE_URL } from '../../lib/site';
+
+const { slug } = Astro.params;
+const page = Math.max(1, Number(Astro.url.searchParams.get('page') ?? '1') || 1);
+const { sites, total, tag } = slug ? await getApprovedSitesByTag(env.DB, slug, page) : { sites: [], total: 0, tag: null };
+
+if (!tag) {
+  return Astro.redirect('/404');
+}
+
+const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+const description = `#${tag.name} 태그가 붙은 국내 웹사이트 모음`;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  name: `#${tag.name} 사이트 목록`,
+  url: new URL(`/tag/${tag.slug}`, SITE_URL).toString(),
+  itemListElement: sites.map((site, index) => ({
+    '@type': 'ListItem',
+    position: (page - 1) * PAGE_SIZE + index + 1,
+    url: new URL(`/site/${site.slug}`, SITE_URL).toString(),
+    name: site.name,
+  })),
+};
+---
+
+<Layout title={`#${tag.name}`} description={description} canonicalPath={`/tag/${tag.slug}`} jsonLd={jsonLd}>
+  <nav class="text-sm text-slate-400 mb-4">
+    <a href="/" class="hover:text-slate-600">홈</a> <span class="mx-1">/</span> #{tag.name}
+  </nav>
+
+  <h1 class="text-2xl font-bold text-slate-900">#{tag.name}</h1>
+  <p class="mt-2 text-slate-500">{description}</p>
+  <p class="mt-1 text-sm text-slate-400">{total}개 사이트</p>
+
+  {sites.length === 0 ? (
+    <p class="mt-10 text-slate-400">아직 이 태그가 붙은 사이트가 없습니다.</p>
+  ) : (
+    <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {sites.map((site) => <SiteCard site={site} showCategory={true} />)}
+    </div>
+  )}
+
+  {totalPages > 1 && (
+    <nav class="mt-10 flex items-center justify-center gap-2 text-sm">
+      {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+        <a
+          href={`/tag/${tag.slug}${p > 1 ? `?page=${p}` : ''}`}
+          class={`rounded-md px-3 py-1.5 border ${p === page ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 text-slate-600 hover:border-slate-500'}`}
+        >
+          {p}
+        </a>
+      ))}
+    </nav>
+  )}
+</Layout>

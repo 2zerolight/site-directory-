@@ -3,13 +3,14 @@ import { env } from 'cloudflare:workers';
 import Layout from '../layouts/Layout.astro';
 import CategoryCard from '../components/CategoryCard.astro';
 import SiteCard from '../components/SiteCard.astro';
-import { getCategoriesWithCounts, getRecentApprovedSites, getPopularApprovedSites } from '../lib/db';
+import { getCategoriesWithCounts, getRecentApprovedSites, getPopularApprovedSites, getPopularTags } from '../lib/db';
 import { SITE_NAME, SITE_DESCRIPTION, SITE_URL } from '../lib/site';
 
-const [categories, recentSites, popularSites] = await Promise.all([
+const [categories, recentSites, popularSites, popularTags] = await Promise.all([
   getCategoriesWithCounts(env.DB),
   getRecentApprovedSites(env.DB, 8),
   getPopularApprovedSites(env.DB, 8),
+  getPopularTags(env.DB, 16),
 ]);
 
 const jsonLd = {
@@ -53,6 +54,19 @@ const jsonLd = {
       <h2 class="text-xl font-semibold text-slate-900 mb-4">최근 등록된 사이트</h2>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {recentSites.map((site) => <SiteCard site={site} />)}
+      </div>
+    </section>
+  )}
+
+  {popularTags.length > 0 && (
+    <section class="mt-12">
+      <h2 class="text-xl font-semibold text-slate-900 mb-4">인기 태그</h2>
+      <div class="flex flex-wrap gap-2">
+        {popularTags.map((tag) => (
+          <a href={`/tag/${tag.slug}`} class="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:border-slate-400 hover:text-slate-900">
+            #{tag.name} <span class="text-slate-400">{tag.site_count}</span>
+          </a>
+        ))}
       </div>
     </section>
   )}

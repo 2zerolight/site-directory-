@@ -85,6 +85,7 @@ CREATE INDEX idx_sites_status_created ON sites(status, created_at);
 
 CREATE TABLE tags (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL UNIQUE
 );
 
@@ -93,6 +94,18 @@ CREATE TABLE site_tags (
   tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
   PRIMARY KEY (site_id, tag_id)
 );
+
+CREATE TABLE reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+  rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  author_name TEXT,
+  comment TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_reviews_site_status ON reviews(site_id, status);
 
 INSERT INTO categories (slug, name, description, sort_order) VALUES
   ('portal-search', '포털/검색', '검색엔진, 포털, 지도, 메일', 1),

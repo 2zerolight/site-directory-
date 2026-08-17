@@ -1,6 +1,8 @@
 ---
+import { env } from 'cloudflare:workers';
 import type { Category, Subcategory, SiteWithCategory } from '../types';
 import { REGIONS, SITE_TYPES, PLATFORMS } from '../lib/constants';
+import { getTagsForSite } from '../lib/db';
 
 interface Props {
   site: SiteWithCategory;
@@ -10,6 +12,8 @@ interface Props {
 }
 
 const { site, categories, subcategories, redirectTo } = Astro.props;
+const tags = await getTagsForSite(env.DB, site.id);
+const tagsValue = tags.map((t) => t.name).join(', ');
 
 const textFields = [
   ['name', '사이트 이름', site.name, 'text'],
@@ -139,6 +143,11 @@ const statusBadgeClass = {
         <div class="sm:col-span-2">
           <label class={adminLabelClass} for={`description-${site.id}`}>상세 설명</label>
           <textarea id={`description-${site.id}`} name="description" rows="3" class={adminInputClass}>{site.description}</textarea>
+        </div>
+
+        <div class="sm:col-span-2">
+          <label class={adminLabelClass} for={`tags-${site.id}`}>태그 (쉼표로 구분)</label>
+          <input id={`tags-${site.id}`} name="tags" type="text" value={tagsValue} class={adminInputClass} placeholder="예: 무료, 회원가입 불필요, 모바일 앱" />
         </div>
 
         <div>

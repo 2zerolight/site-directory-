@@ -14,15 +14,16 @@ function urlEntry(path: string, lastmod: string | null): string {
 }
 
 export const GET: APIRoute = async () => {
-  const { sites, categories } = await getSitemapData(env.DB);
+  const { sites, categories, tags } = await getSitemapData(env.DB);
 
   const staticEntries = ['/', '/search', '/submit'].map((path) => urlEntry(path, null));
   const categoryEntries = categories.map((c) => urlEntry(`/category/${c.slug}`, toLastmod(c.last_update)));
+  const tagEntries = tags.map((t) => urlEntry(`/tag/${t.slug}`, toLastmod(t.last_update)));
   const siteEntries = sites.map((s) => urlEntry(`/site/${s.slug}`, toLastmod(s.updated_at)));
 
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${[...staticEntries, ...categoryEntries, ...siteEntries].join('\n')}
+${[...staticEntries, ...categoryEntries, ...tagEntries, ...siteEntries].join('\n')}
 </urlset>`;
 
   return new Response(body, {

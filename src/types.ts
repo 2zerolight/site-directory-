@@ -84,3 +84,26 @@ export interface SiteWithCategory extends Site {
 export interface CategoryWithCount extends Category {
   site_count: number;
 }
+
+export interface Tag {
+  id: number;
+  slug: string;
+  name: string;
+}
+
+export type ReviewStatus = 'pending' | 'approved' | 'rejected';
+
+export interface Review {
+  id: number;
+  site_id: number;
+  rating: number;
+  author_name: string | null;
+  comment: string;
+  status: ReviewStatus;
+  created_at: string;
+}
+
+export interface ReviewWithSite extends Review {
+  site_name: string;
+  site_slug: string;
+}

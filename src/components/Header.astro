@@ -10,7 +10,7 @@ const q = Astro.url.searchParams.get('q') ?? '';
       {SITE_NAME}
     </a>
 
-    <form action="/search" method="get" class="min-w-0 flex-1 max-w-md">
+    <form action="/search" method="get" class="relative min-w-0 flex-1 max-w-md">
       <label class="sr-only" for="header-search">사이트 검색</label>
       <input
         id="header-search"
@@ -18,9 +18,18 @@ const q = Astro.url.searchParams.get('q') ?? '';
         name="q"
         value={q}
         placeholder="사이트 이름이나 설명으로 검색"
+        autocomplete="off"
         class="w-full min-w-0 rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
       />
+      <ul
+        id="search-suggestions"
+        class="absolute left-0 right-0 top-full z-20 mt-1 hidden max-h-80 overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg"
+      ></ul>
     </form>
+
+    <a href="/bookmarks" aria-label="즐겨찾기" class="shrink-0 rounded-md border border-slate-200 px-2.5 py-2 text-sm text-slate-500 hover:border-slate-400 hover:text-amber-500">
+      ★
+    </a>
 
     <a
       href="/submit"
@@ -30,3 +39,71 @@ const q = Astro.url.searchParams.get('q') ?? '';
     </a>
   </div>
 </header>
+
+<script>
+  function escapeHtml(s: string): string {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  const input = document.getElementById('header-search') as HTMLInputElement | null;
+  const list = document.getElementById('search-suggestions');
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  let currentRequest = 0;
+
+  function hideSuggestions() {
+    if (list) {
+      list.classList.add('hidden');
+      list.innerHTML = '';
+    }
+  }
+
+  async function fetchSuggestions(query: string) {
+    const requestId = ++currentRequest;
+    try {
+      const res = await fetch(`/api/search-suggest?q=${encodeURIComponent(query)}`);
+      const data = (await res.json()) as { suggestions: { name: string; slug: string; logo_url: string | null; category_name: string }[] };
+      if (requestId !== currentRequest || !list) return;
+
+      if (data.suggestions.length === 0) {
+        hideSuggestions();
+        return;
+      }
+
+      list.innerHTML = data.suggestions
+        .map(
+          (s) => `
+        <li>
+          <a href="/site/${encodeURIComponent(s.slug)}" class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50">
+            ${s.logo_url ? `<img src="${escapeHtml(s.logo_url)}" alt="" class="h-6 w-6 rounded object-cover shrink-0" />` : ''}
+            <span class="truncate text-slate-800">${escapeHtml(s.name)}</span>
+            <span class="ml-auto shrink-0 text-xs text-slate-400">${escapeHtml(s.category_name)}</span>
+          </a>
+        </li>`
+        )
+        .join('');
+      list.classList.remove('hidden');
+    } catch {
+      hideSuggestions();
+    }
+  }
+
+  input?.addEventListener('input', () => {
+    const value = input.value.trim();
+    clearTimeout(debounceTimer);
+    if (value.length < 1) {
+      hideSuggestions();
+      return;
+    }
+    debounceTimer = setTimeout(() => fetchSuggestions(value), 200);
+  });
+
+  input?.addEventListener('blur', () => {
+    setTimeout(hideSuggestions, 150);
+  });
+
+  input?.addEventListener('focus', () => {
+    if (input.value.trim().length >= 1 && list?.innerHTML) list.classList.remove('hidden');
+  });
+</script>

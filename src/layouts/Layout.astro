@@ -55,5 +55,53 @@ const ogImageUrl = new URL(image || '/og-image.png', SITE_URL).toString();
       <slot />
     </main>
     <Footer />
+
+    <script>
+      const BOOKMARK_KEY = 'siteda_bookmarks';
+
+      function getBookmarks(): number[] {
+        try {
+          const raw = localStorage.getItem(BOOKMARK_KEY);
+          return raw ? (JSON.parse(raw) as number[]) : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function setBookmarks(ids: number[]) {
+        localStorage.setItem(BOOKMARK_KEY, JSON.stringify(ids));
+      }
+
+      function syncIcon(el: HTMLElement, bookmarked: boolean) {
+        const icon = el.querySelector('[data-bookmark-icon]');
+        if (icon) icon.textContent = bookmarked ? '★' : '☆';
+        el.classList.toggle('text-amber-500', bookmarked);
+        el.setAttribute('aria-pressed', String(bookmarked));
+      }
+
+      function initBookmarkButtons() {
+        const bookmarks = getBookmarks();
+        document.querySelectorAll<HTMLElement>('[data-bookmark-toggle]').forEach((el) => {
+          const id = Number(el.dataset.siteId);
+          syncIcon(el, bookmarks.includes(id));
+          if (el.dataset.bookmarkBound) return;
+          el.dataset.bookmarkBound = '1';
+          el.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const current = getBookmarks();
+            const idx = current.indexOf(id);
+            const nowBookmarked = idx === -1;
+            if (nowBookmarked) current.push(id);
+            else current.splice(idx, 1);
+            setBookmarks(current);
+            syncIcon(el, nowBookmarked);
+          });
+        });
+      }
+
+      initBookmarkButtons();
+      document.addEventListener('astro:page-load', initBookmarkButtons);
+    </script>
   </body>
 </html>
