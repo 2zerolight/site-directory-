@@ -11,7 +11,24 @@ import {
 } from '../../lib/db';
 import { SITE_URL } from '../../lib/site';
 
+// 2026-08-17 taxonomy revamp: redirect old category slugs that changed name.
+const OLD_CATEGORY_SLUG_REDIRECTS: Record<string, string> = {
+  'it-development': 'it-dev',
+  shopping: 'shopping-price',
+  travel: 'travel-stay',
+  health: 'health-medical',
+  'public-gov': 'gov-public',
+  lifestyle: 'life-convenience',
+  portal: 'portal-search',
+  'sns-celebrity': 'sns-creator',
+};
+
 const { slug } = Astro.params;
+
+if (slug && OLD_CATEGORY_SLUG_REDIRECTS[slug]) {
+  return Astro.redirect(`/category/${OLD_CATEGORY_SLUG_REDIRECTS[slug]}${Astro.url.search}`, 301);
+}
+
 const category = slug ? await getCategoryBySlug(env.DB, slug) : null;
 
 if (!category) {

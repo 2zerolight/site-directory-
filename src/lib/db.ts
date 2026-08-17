@@ -190,17 +190,31 @@ export async function searchSites(db: D1Database, query: string, limit = 30): Pr
   return results;
 }
 
-export async function getAllApprovedSlugsAndCategorySlugs(
+export interface SitemapSite {
+  slug: string;
+  updated_at: string;
+}
+
+export interface SitemapCategory {
+  slug: string;
+  last_update: string | null;
+}
+
+export async function getSitemapData(
   db: D1Database
-): Promise<{ siteSlugs: string[]; categorySlugs: string[] }> {
+): Promise<{ sites: SitemapSite[]; categories: SitemapCategory[] }> {
   const [sites, categories] = await Promise.all([
-    db.prepare(`SELECT slug FROM sites WHERE status = 'approved'`).all<{ slug: string }>(),
-    db.prepare('SELECT slug FROM categories').all<{ slug: string }>(),
+    db.prepare(`SELECT slug, updated_at FROM sites WHERE status = 'approved'`).all<SitemapSite>(),
+    db
+      .prepare(
+        `SELECT c.slug AS slug, MAX(s.updated_at) AS last_update
+         FROM categories c
+         LEFT JOIN sites s ON s.category_id = c.id AND s.status = 'approved'
+         GROUP BY c.id`
+      )
+      .all<SitemapCategory>(),
   ]);
-  return {
-    siteSlugs: sites.results.map((r) => r.slug),
-    categorySlugs: categories.results.map((r) => r.slug),
-  };
+  return { sites: sites.results, categories: categories.results };
 }
 
 export async function getPendingSites(db: D1Database): Promise<SiteWithCategory[]> {
