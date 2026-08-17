@@ -214,6 +214,50 @@ export async function getPendingSites(db: D1Database): Promise<SiteWithCategory[
   return results;
 }
 
+export async function getSiteById(db: D1Database, id: number): Promise<SiteWithCategory | null> {
+  const row = await db
+    .prepare(`SELECT ${SITE_WITH_CATEGORY_SELECT} ${SITE_WITH_CATEGORY_JOIN} WHERE s.id = ?`)
+    .bind(id)
+    .first<SiteWithCategory>();
+  return row ?? null;
+}
+
+export type AdminSiteStatusFilter = 'pending' | 'approved' | 'rejected' | 'all';
+
+export async function getSitesForAdmin(
+  db: D1Database,
+  opts: { status: AdminSiteStatusFilter; query?: string; limit?: number }
+): Promise<{ sites: SiteWithCategory[]; total: number }> {
+  const limit = opts.limit ?? 50;
+  const statusFilter = opts.status === 'all' ? '' : 'AND s.status = ?';
+  const queryFilter = opts.query ? 'AND (s.name LIKE ? OR s.url LIKE ?)' : '';
+
+  const args: (string | number)[] = [];
+  if (opts.status !== 'all') args.push(opts.status);
+  if (opts.query) {
+    const like = `%${opts.query}%`;
+    args.push(like, like);
+  }
+
+  const [listResult, countResult] = await Promise.all([
+    db
+      .prepare(
+        `SELECT ${SITE_WITH_CATEGORY_SELECT} ${SITE_WITH_CATEGORY_JOIN}
+         WHERE 1=1 ${statusFilter} ${queryFilter}
+         ORDER BY s.created_at DESC
+         LIMIT ?`
+      )
+      .bind(...args, limit)
+      .all<SiteWithCategory>(),
+    db
+      .prepare(`SELECT COUNT(*) AS n FROM sites s WHERE 1=1 ${statusFilter} ${queryFilter}`)
+      .bind(...args)
+      .first<{ n: number }>(),
+  ]);
+
+  return { sites: listResult.results, total: countResult?.n ?? 0 };
+}
+
 export interface SiteSubmissionInput {
   slug: string;
   name: string;
@@ -288,12 +332,17 @@ export async function insertSiteSubmission(db: D1Database, data: SiteSubmissionI
   return result.meta.last_row_id;
 }
 
-export async function setSiteStatus(db: D1Database, id: number, status: 'approved' | 'rejected'): Promise<void> {
+export async function setSiteStatus(db: D1Database, id: number, status: 'pending' | 'approved' | 'rejected'): Promise<void> {
   if (status === 'approved') {
     await db
       .prepare(
         `UPDATE sites SET status = 'approved', approved_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`
       )
+      .bind(id)
+      .run();
+  } else if (status === 'pending') {
+    await db
+      .prepare(`UPDATE sites SET status = 'pending', updated_at = datetime('now') WHERE id = ?`)
       .bind(id)
       .run();
   } else {

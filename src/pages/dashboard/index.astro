@@ -1,19 +1,20 @@
 ---
 import { env } from 'cloudflare:workers';
 import Layout from '../../layouts/Layout.astro';
+import AdminSiteCard from '../../components/AdminSiteCard.astro';
 import {
-  getPendingSites,
   setSiteStatus,
   checkSiteHealth,
   updateSiteFields,
   adminVerifyOwnership,
   getCategories,
   getAllSubcategories,
+  getSitesForAdmin,
+  getSiteById,
+  type AdminSiteStatusFilter,
 } from '../../lib/db';
 import { normalizeRequiredUrl, normalizeOptionalUrl } from '../../lib/urls';
-import { REGIONS, SITE_TYPES, PLATFORMS } from '../../lib/constants';
 import { ADMIN_COOKIE_NAME, createSessionCookieValue, isValidSessionCookieValue } from '../../lib/auth';
-import type { Category } from '../../types';
 
 const adminPassword = env.ADMIN_PASSWORD;
 
@@ -45,19 +46,22 @@ if (Astro.request.method === 'POST') {
 
     if (isAuthed) {
       const id = Number(data.get('id'));
+      const redirectTo = String(data.get('redirectTo') ?? '');
+      const backTo = `/dashboard${redirectTo}`;
 
-      if (id && (action === 'approve' || action === 'reject')) {
+      if (id && (action === 'approve' || action === 'reject' || action === 'set_pending')) {
         const url = String(data.get('url') ?? '');
         if (action === 'approve' && url) {
           await checkSiteHealth(env.DB, id, url);
         }
-        await setSiteStatus(env.DB, id, action === 'approve' ? 'approved' : 'rejected');
-        return Astro.redirect('/dashboard');
+        const status = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'pending';
+        await setSiteStatus(env.DB, id, status);
+        return Astro.redirect(`${backTo}#site-${id}`);
       }
 
       if (id && action === 'verify_admin') {
         await adminVerifyOwnership(env.DB, id);
-        return Astro.redirect(`/dashboard#site-${id}`);
+        return Astro.redirect(`${backTo}#site-${id}`);
       }
 
       if (id && action === 'update') {
@@ -118,10 +122,11 @@ if (Astro.request.method === 'POST') {
             facebookUrl: facebook.value,
             otherSnsUrl: otherSns.value,
           });
-          return Astro.redirect(`/dashboard#site-${id}`);
+          return Astro.redirect(`${backTo}#site-${id}`);
         }
 
-        return Astro.redirect(`/dashboard?error=update#site-${id}`);
+        const sep = redirectTo.includes('?') ? '&' : '?';
+        return Astro.redirect(`${backTo}${sep}error=update#site-${id}`);
       }
     }
 
@@ -130,17 +135,33 @@ if (Astro.request.method === 'POST') {
 }
 
 const isAuthed = await isValidSessionCookieValue(adminPassword, Astro.cookies.get(ADMIN_COOKIE_NAME)?.value);
-const pendingSites = isAuthed ? await getPendingSites(env.DB) : [];
+
+const statusParam = (Astro.url.searchParams.get('status') ?? 'pending') as AdminSiteStatusFilter;
+const status: AdminSiteStatusFilter = (['pending', 'approved', 'rejected', 'all'] as const).includes(statusParam)
+  ? statusParam
+  : 'pending';
+const searchQuery = Astro.url.searchParams.get('q') ?? '';
+const singleSiteId = Number(Astro.url.searchParams.get('site') || '');
+
 const categories = isAuthed ? await getCategories(env.DB) : [];
 const subcategories = isAuthed ? await getAllSubcategories(env.DB) : [];
 const updateFailed = Astro.url.searchParams.get('error') === 'update';
 
-const adminInputClass =
-  'mt-1 w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900';
-const adminLabelClass = 'text-xs font-medium text-slate-500';
+const singleSite = isAuthed && singleSiteId ? await getSiteById(env.DB, singleSiteId) : null;
+const listResult =
+  isAuthed && !singleSiteId ? await getSitesForAdmin(env.DB, { status, query: searchQuery || undefined }) : null;
+
+const currentQueryString = Astro.url.search;
+
+const tabs: { value: AdminSiteStatusFilter; label: string }[] = [
+  { value: 'pending', label: '대기' },
+  { value: 'approved', label: '승인됨' },
+  { value: 'rejected', label: '거절됨' },
+  { value: 'all', label: '전체' },
+];
 ---
 
-<Layout title="관리자" description="사이트 제출 승인 관리" canonicalPath="/dashboard" noindex>
+<Layout title="관리자" description="사이트 등록 관리" canonicalPath="/dashboard" noindex>
   {!isAuthed ? (
     <div class="max-w-sm mx-auto mt-10">
       <h1 class="text-xl font-bold text-slate-900">관리자 로그인</h1>
@@ -159,7 +180,7 @@ const adminLabelClass = 'text-xs font-medium text-slate-500';
   ) : (
     <div>
       <div class="flex items-center justify-between">
-        <h1 class="text-xl font-bold text-slate-900">승인 대기 중인 사이트 ({pendingSites.length})</h1>
+        <h1 class="text-xl font-bold text-slate-900">사이트 관리</h1>
         <form method="post">
           <input type="hidden" name="action" value="logout" />
           <button type="submit" class="text-sm text-slate-400 hover:text-slate-700 underline">로그아웃</button>
@@ -172,156 +193,59 @@ const adminLabelClass = 'text-xs font-medium text-slate-500';
         </div>
       )}
 
-      {pendingSites.length === 0 ? (
-        <p class="mt-8 text-slate-400">대기 중인 제출이 없습니다.</p>
+      {singleSite ? (
+        <div class="mt-6">
+          <a href="/dashboard" class="text-sm text-slate-400 underline hover:text-slate-700">← 전체 목록으로</a>
+          <ul class="mt-3 space-y-3">
+            <AdminSiteCard site={singleSite} categories={categories} subcategories={subcategories} redirectTo={`?site=${singleSite.id}`} />
+          </ul>
+        </div>
+      ) : singleSiteId ? (
+        <p class="mt-8 text-slate-400">
+          해당 사이트를 찾을 수 없습니다. <a href="/dashboard" class="underline">← 전체 목록으로</a>
+        </p>
       ) : (
-        <ul class="mt-6 space-y-3">
-          {pendingSites.map((site) => {
-            const textFields = [
-              ['name', '사이트 이름', site.name, 'text'],
-              ['url', '사이트 URL', site.url, 'url'],
-              ['tagline', '한 줄 소개', site.tagline, 'text'],
-              ['logoUrl', '로고 이미지 URL', site.logo_url, 'url'],
-              ['coverImageUrl', '대표 이미지 URL', site.cover_image_url, 'url'],
-              ['mainKeywords', '주요 키워드', site.main_keywords, 'text'],
-              ['serviceKeywords', '서비스 키워드', site.service_keywords, 'text'],
-              ['operatorName', '운영 주체', site.operator_name, 'text'],
-              ['businessName', '사업자명', site.business_name, 'text'],
-              ['serviceRegion', '서비스 지역', site.service_region, 'text'],
-              ['customerCenter', '고객센터', site.customer_center, 'text'],
-              ['contactEmail', '공개 이메일', site.contact_email, 'email'],
-              ['blogUrl', '블로그', site.blog_url, 'url'],
-              ['youtubeUrl', '유튜브', site.youtube_url, 'url'],
-              ['instagramUrl', '인스타그램', site.instagram_url, 'url'],
-              ['facebookUrl', '페이스북', site.facebook_url, 'url'],
-              ['otherSnsUrl', '기타 SNS', site.other_sns_url, 'url'],
-            ] as [string, string, string | null, 'text' | 'url' | 'email'][];
-            return (
-              <li id={`site-${site.id}`} class="scroll-mt-4 rounded-lg border border-slate-200 bg-white p-4">
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p class="font-semibold text-slate-900">
-                      {site.name}
-                      <span class="ml-2 text-xs text-slate-400">
-                        {site.category_name}{site.subcategory_name ? ` · ${site.subcategory_name}` : ''}
-                        {site.platform ? ` · ${site.platform}` : ''}
-                        {site.region ? ` · ${site.region}` : ''}
-                        {site.site_type ? ` · ${site.site_type}` : ''}
-                      </span>
-                      {site.ownership_verified ? (
-                        <span class="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
-                          {site.verified_by_admin ? '관리자 인증됨' : '소유권 인증됨'}
-                        </span>
-                      ) : site.third_party_submission ? (
-                        <span class="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">제3자 제출 · 검토 필요</span>
-                      ) : (
-                        <span class="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">미인증</span>
-                      )}
-                    </p>
-                    <a href={site.url} target="_blank" rel="noopener noreferrer" class="text-sm text-slate-500 underline">{site.url}</a>
-                    <p class="mt-1 text-sm text-slate-600">{site.tagline}</p>
-                    <p class="mt-1 text-xs text-slate-400 whitespace-pre-line">{site.description}</p>
-                    {site.submitted_email && <p class="mt-1 text-xs text-slate-400">제출자: {site.submitted_email}</p>}
-                  </div>
-                  <div class="flex gap-2 shrink-0">
-                    <form method="post">
-                      <input type="hidden" name="action" value="approve" />
-                      <input type="hidden" name="id" value={site.id} />
-                      <input type="hidden" name="url" value={site.url} />
-                      <button type="submit" class="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-500">승인</button>
-                    </form>
-                    <form method="post">
-                      <input type="hidden" name="action" value="reject" />
-                      <input type="hidden" name="id" value={site.id} />
-                      <button type="submit" class="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500">거절</button>
-                    </form>
-                  </div>
-                </div>
+        <>
+          <div class="mt-4 flex flex-wrap items-center gap-2">
+            {tabs.map((tab) => (
+              <a
+                href={`/dashboard?status=${tab.value}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ''}`}
+                class={`rounded-full px-3 py-1.5 text-sm font-medium ${
+                  status === tab.value ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {tab.label}
+              </a>
+            ))}
+            <form method="get" class="ml-auto flex gap-2">
+              <input type="hidden" name="status" value={status} />
+              <input
+                type="search" name="q" value={searchQuery} placeholder="이름·URL 검색"
+                class="rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+              />
+              <button type="submit" class="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">검색</button>
+            </form>
+          </div>
 
-                <details class="mt-3">
-                  <summary class="cursor-pointer text-xs font-medium text-slate-500 underline">상세 정보 · 수정</summary>
+          {listResult && (
+            <>
+              <p class="mt-3 text-sm text-slate-400">
+                총 {listResult.total}개
+                {listResult.total > listResult.sites.length ? ` 중 최근 ${listResult.sites.length}개 표시 (검색으로 좁혀보세요)` : ''}
+              </p>
 
-                  <div class="mt-3 rounded-md border border-slate-100 bg-slate-50 p-4">
-                    {!site.ownership_verified && (
-                      <form method="post" class="mb-4">
-                        <input type="hidden" name="action" value="verify_admin" />
-                        <input type="hidden" name="id" value={site.id} />
-                        <button type="submit" class="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500">
-                          관리자 재량으로 소유권 인증 처리
-                        </button>
-                      </form>
-                    )}
-
-                    <form method="post" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <input type="hidden" name="action" value="update" />
-                      <input type="hidden" name="id" value={site.id} />
-
-                      {textFields.map(([formName, label, value, type]) => (
-                        <div>
-                          <label class={adminLabelClass} for={`${formName}-${site.id}`}>{label}</label>
-                          <input id={`${formName}-${site.id}`} name={formName} type={type} value={value ?? ''} class={adminInputClass} />
-                        </div>
-                      ))}
-
-                      <div class="sm:col-span-2">
-                        <label class={adminLabelClass} for={`description-${site.id}`}>상세 설명</label>
-                        <textarea id={`description-${site.id}`} name="description" rows="3" class={adminInputClass}>{site.description}</textarea>
-                      </div>
-
-                      <div>
-                        <label class={adminLabelClass} for={`categoryId-${site.id}`}>대분류</label>
-                        <select id={`categoryId-${site.id}`} name="categoryId" class={adminInputClass}>
-                          {categories.map((c: Category) => (
-                            <option value={c.id} selected={c.id === site.category_id}>{c.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label class={adminLabelClass} for={`subcategoryId-${site.id}`}>중분류</label>
-                        <select id={`subcategoryId-${site.id}`} name="subcategoryId" class={adminInputClass}>
-                          <option value="">선택 안 함</option>
-                          {subcategories
-                            .filter((s) => s.category_id === site.category_id)
-                            .map((sub) => (
-                              <option value={sub.id} selected={sub.id === site.subcategory_id}>{sub.name}</option>
-                            ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label class={adminLabelClass} for={`region-${site.id}`}>지역</label>
-                        <select id={`region-${site.id}`} name="region" class={adminInputClass}>
-                          <option value="">선택 안 함</option>
-                          {REGIONS.map((r) => <option value={r} selected={r === site.region}>{r}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label class={adminLabelClass} for={`siteType-${site.id}`}>사이트 유형</label>
-                        <select id={`siteType-${site.id}`} name="siteType" class={adminInputClass}>
-                          <option value="">선택 안 함</option>
-                          {SITE_TYPES.map((t) => <option value={t} selected={t === site.site_type}>{t}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label class={adminLabelClass} for={`platform-${site.id}`}>플랫폼</label>
-                        <select id={`platform-${site.id}`} name="platform" class={adminInputClass}>
-                          <option value="">선택 안 함</option>
-                          {PLATFORMS.map((p) => <option value={p} selected={p === site.platform}>{p}</option>)}
-                        </select>
-                      </div>
-
-                      <div class="sm:col-span-2 flex justify-end">
-                        <button type="submit" class="rounded-md bg-slate-900 px-4 py-1.5 text-xs font-medium text-white hover:bg-slate-700">
-                          저장
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </details>
-              </li>
-            );
-          })}
-        </ul>
+              {listResult.sites.length === 0 ? (
+                <p class="mt-8 text-slate-400">조건에 맞는 사이트가 없습니다.</p>
+              ) : (
+                <ul class="mt-3 space-y-3">
+                  {listResult.sites.map((site) => (
+                    <AdminSiteCard site={site} categories={categories} subcategories={subcategories} redirectTo={currentQueryString} />
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </>
       )}
     </div>
   )}

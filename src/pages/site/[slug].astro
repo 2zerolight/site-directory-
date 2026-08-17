@@ -4,6 +4,7 @@ import Layout from '../../layouts/Layout.astro';
 import SiteCard from '../../components/SiteCard.astro';
 import { getSiteBySlug, getRelatedSites, incrementViewCount } from '../../lib/db';
 import { SITE_URL } from '../../lib/site';
+import { ADMIN_COOKIE_NAME, isValidSessionCookieValue } from '../../lib/auth';
 
 const { slug } = Astro.params;
 const site = slug ? await getSiteBySlug(env.DB, slug) : null;
@@ -11,6 +12,8 @@ const site = slug ? await getSiteBySlug(env.DB, slug) : null;
 if (!site || site.status !== 'approved') {
   return Astro.redirect('/404');
 }
+
+const isAdmin = await isValidSessionCookieValue(env.ADMIN_PASSWORD, Astro.cookies.get(ADMIN_COOKIE_NAME)?.value);
 
 await incrementViewCount(env.DB, site.id);
 const relatedSites = await getRelatedSites(env.DB, site.category_id, site.id, 6);
@@ -87,27 +90,36 @@ const jsonLd = {
     <span class="mx-1">/</span> {site.name}
   </nav>
 
+  {isAdmin && (
+    <a
+      href={`/dashboard?site=${site.id}#site-${site.id}`}
+      class="mb-4 inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"
+    >
+      관리자: 이 사이트 수정하기
+    </a>
+  )}
+
   {site.cover_image_url && (
     <img src={site.cover_image_url} alt={`${site.name} 대표 이미지`} class="w-full max-h-72 object-cover rounded-lg border border-slate-200 mb-6" loading="lazy" />
   )}
 
   <div class="rounded-lg border border-slate-200 bg-white p-6 md:p-8">
-    <div class="flex items-start justify-between gap-4 flex-wrap">
-      <div class="flex items-start gap-4">
+    <div class="flex items-start justify-between gap-3 sm:gap-4 flex-nowrap">
+      <div class="flex min-w-0 items-start gap-3 sm:gap-4">
         {site.logo_url && (
           <img src={site.logo_url} alt={`${site.name} 로고`} class="w-14 h-14 rounded-md object-cover object-left bg-white border border-slate-100 shrink-0" loading="lazy" />
         )}
-        <div>
-          <h1 class="text-2xl font-bold text-slate-900">{site.name}</h1>
-          <p class="mt-1 text-sm text-slate-500">{hostname}</p>
-          {site.tagline && <p class="mt-2 text-slate-700 font-medium">{site.tagline}</p>}
+        <div class="min-w-0">
+          <h1 class="text-2xl font-bold text-slate-900 break-words">{site.name}</h1>
+          <p class="mt-1 text-sm text-slate-500 break-words">{hostname}</p>
+          {site.tagline && <p class="mt-2 text-slate-700 font-medium break-words">{site.tagline}</p>}
         </div>
       </div>
       <a
         href={`/go/${site.slug}`}
         target="_blank"
         rel="nofollow noopener noreferrer sponsored"
-        class="shrink-0 rounded-md bg-slate-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-slate-700"
+        class="shrink-0 rounded-md bg-slate-900 px-3 py-2 text-xs sm:px-5 sm:py-2.5 sm:text-sm font-medium text-white hover:bg-slate-700"
       >
         공식 홈페이지 방문 →
       </a>
@@ -126,7 +138,7 @@ const jsonLd = {
     </div>
 
     {site.description && (
-      <p class="mt-6 text-slate-700 leading-relaxed whitespace-pre-line">{site.description}</p>
+      <p class="mt-6 text-slate-700 leading-relaxed whitespace-pre-line break-words">{site.description}</p>
     )}
 
     {serviceChips.length > 0 && (
