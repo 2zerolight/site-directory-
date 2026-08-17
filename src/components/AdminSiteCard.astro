@@ -66,9 +66,9 @@ const statusBadgeClass = {
         )}
       </p>
       <a href={site.url} target="_blank" rel="noopener noreferrer" class="text-sm text-slate-500 underline">{site.url}</a>
-      {site.status === 'approved' && (
-        <a href={`/site/${site.slug}`} class="ml-2 text-sm text-slate-400 underline hover:text-slate-600">공개 페이지 보기</a>
-      )}
+      <a href={`/site/${site.slug}`} class="ml-2 text-sm text-slate-400 underline hover:text-slate-600">
+        {site.status === 'approved' ? '공개 페이지 보기' : '미리보기'}
+      </a>
       <p class="mt-1 text-sm text-slate-600">{site.tagline}</p>
       <p class="mt-1 text-xs text-slate-400 whitespace-pre-line break-words">{site.description}</p>
       {site.submitted_email && <p class="mt-1 text-xs text-slate-400">제출자: {site.submitted_email}</p>}

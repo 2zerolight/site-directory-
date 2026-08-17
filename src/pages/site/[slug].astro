@@ -9,13 +9,20 @@ import { ADMIN_COOKIE_NAME, isValidSessionCookieValue } from '../../lib/auth';
 const { slug } = Astro.params;
 const site = slug ? await getSiteBySlug(env.DB, slug) : null;
 
-if (!site || site.status !== 'approved') {
+if (!site) {
   return Astro.redirect('/404');
 }
 
 const isAdmin = await isValidSessionCookieValue(env.ADMIN_PASSWORD, Astro.cookies.get(ADMIN_COOKIE_NAME)?.value);
+const isApproved = site.status === 'approved';
 
-await incrementViewCount(env.DB, site.id);
+if (!isApproved && !isAdmin) {
+  return Astro.redirect('/404');
+}
+
+if (isApproved) {
+  await incrementViewCount(env.DB, site.id);
+}
 const relatedSites = await getRelatedSites(env.DB, site.category_id, site.id, 6);
 
 const hostname = new URL(site.url).hostname;
@@ -105,6 +112,7 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
   canonicalPath={`/site/${site.slug}`}
   jsonLd={jsonLd}
   image={site.cover_image_url ?? undefined}
+  noindex={!isApproved}
 >
   <nav class="text-sm text-slate-400 mb-4">
     <a href="/" class="hover:text-slate-600">홈</a> <span class="mx-1">/</span>
@@ -117,6 +125,12 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
     )}
     <span class="mx-1">/</span> {site.name}
   </nav>
+
+  {!isApproved && (
+    <div class="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+      관리자 미리보기 — 이 사이트는 아직 {site.status === 'pending' ? '승인 대기 중' : '거절됨'}이라 공개 디렉토리에는 노출되지 않습니다.
+    </div>
+  )}
 
   {isAdmin && (
     <a

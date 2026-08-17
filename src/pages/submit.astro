@@ -478,7 +478,8 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
       }
     }
 
-    autofillBtn?.addEventListener('click', async () => {
+    async function runAutofill() {
+      if (!autofillBtn) return;
       if (urlInput) urlInput.value = withDefaultProtocol(urlInput.value);
       const url = urlInput?.value.trim();
       if (!url) {
@@ -515,6 +516,14 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
         autofillStatus.textContent = '정보를 불러오지 못했습니다. 직접 입력해주세요.';
       } finally {
         autofillBtn.disabled = false;
+      }
+    }
+
+    autofillBtn?.addEventListener('click', runAutofill);
+    urlInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        runAutofill();
       }
     });
   </script>
