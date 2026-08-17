@@ -113,8 +113,7 @@ INSERT INTO categories (slug, name, description, sort_order) VALUES
   ('business', '기업/비즈니스', '기업정보, B2B, 업무서비스', 16),
   ('sports', '스포츠', '스포츠 뉴스, 경기정보, 구단, 기록', 17),
   ('auto', '자동차', '자동차 정보, 중고차, 차량관리', 18),
-  ('legal-admin', '법률/행정', '법률정보, 세무, 행정서비스', 19),
-  ('etc', '기타', '위 분류에 해당하지 않는 사이트', 20);
+  ('etc', '기타', '위 분류에 해당하지 않는 사이트', 19);
 
 INSERT INTO subcategories (category_id, slug, name, sort_order) VALUES
   ((SELECT id FROM categories WHERE slug = 'portal-search'), 'search-engine', '검색엔진', 1),
@@ -203,8 +202,4 @@ INSERT INTO subcategories (category_id, slug, name, sort_order) VALUES
 
   ((SELECT id FROM categories WHERE slug = 'auto'), 'car-info', '자동차 정보', 1),
   ((SELECT id FROM categories WHERE slug = 'auto'), 'used-car', '중고차', 2),
-  ((SELECT id FROM categories WHERE slug = 'auto'), 'car-management', '차량관리', 3),
-
-  ((SELECT id FROM categories WHERE slug = 'legal-admin'), 'legal-info', '법률정보', 1),
-  ((SELECT id FROM categories WHERE slug = 'legal-admin'), 'tax', '세무', 2),
-  ((SELECT id FROM categories WHERE slug = 'legal-admin'), 'admin-service', '행정서비스', 3);
+  ((SELECT id FROM categories WHERE slug = 'auto'), 'car-management', '차량관리', 3);
