@@ -44,7 +44,21 @@ if (Astro.request.method === 'POST' && isApproved) {
     } else if (!comment || comment.length > 1000) {
       reviewError = '리뷰 내용을 입력해주세요 (1000자 이내).';
     } else {
-      await insertReview(env.DB, { siteId: site.id, rating, authorName: authorName || null, comment });
+      let ipAddress: string | null = null;
+      try {
+        ipAddress = Astro.clientAddress;
+      } catch {
+        ipAddress = null;
+      }
+      const userAgent = Astro.request.headers.get('user-agent');
+      await insertReview(env.DB, {
+        siteId: site.id,
+        rating,
+        authorName: authorName || null,
+        comment,
+        ipAddress,
+        userAgent,
+      });
       reviewSubmitted = true;
     }
   } else {

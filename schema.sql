@@ -102,10 +102,32 @@ CREATE TABLE reviews (
   author_name TEXT,
   comment TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  ip_address TEXT,
+  user_agent TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX idx_reviews_site_status ON reviews(site_id, status);
+
+-- Append-only audit trail for reviews: no FK/cascade to reviews or sites, and
+-- nothing here is ever updated or deleted, so the record survives even if the
+-- underlying review or site row is later removed (malicious-post disputes,
+-- law-enforcement requests, etc. need this to outlive the content itself).
+CREATE TABLE review_audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  review_id INTEGER NOT NULL,
+  site_id INTEGER NOT NULL,
+  event TEXT NOT NULL CHECK (event IN ('submitted', 'approved', 'rejected', 'deleted')),
+  rating INTEGER NOT NULL,
+  author_name TEXT,
+  comment TEXT NOT NULL,
+  ip_address TEXT,
+  user_agent TEXT,
+  actor TEXT NOT NULL DEFAULT 'system',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_review_audit_log_review ON review_audit_log(review_id);
 
 INSERT INTO categories (slug, name, description, sort_order) VALUES
   ('portal-search', '포털/검색', '검색엔진, 포털, 지도, 메일', 1),

@@ -100,6 +100,8 @@ export interface Review {
   author_name: string | null;
   comment: string;
   status: ReviewStatus;
+  ip_address: string | null;
+  user_agent: string | null;
   created_at: string;
 }
 

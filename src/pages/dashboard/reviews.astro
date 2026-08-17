@@ -1,7 +1,7 @@
 ---
 import { env } from 'cloudflare:workers';
 import Layout from '../../layouts/Layout.astro';
-import { getPendingReviews, setReviewStatus } from '../../lib/db';
+import { getReviewsByStatus, setReviewStatus, deleteReview, type AdminReviewStatusFilter } from '../../lib/db';
 import { ADMIN_COOKIE_NAME, isValidSessionCookieValue } from '../../lib/auth';
 
 const adminPassword = env.ADMIN_PASSWORD;
@@ -17,49 +17,102 @@ if (Astro.request.method === 'POST') {
   const id = Number(data.get('id'));
   if (id && (action === 'approve' || action === 'reject')) {
     await setReviewStatus(env.DB, id, action === 'approve' ? 'approved' : 'rejected');
+  } else if (id && action === 'delete') {
+    await deleteReview(env.DB, id);
   }
-  return Astro.redirect('/dashboard/reviews');
+  return Astro.redirect(`/dashboard/reviews?status=${Astro.url.searchParams.get('status') ?? 'pending'}`);
 }
 
-const pendingReviews = await getPendingReviews(env.DB);
+const statusParam = (Astro.url.searchParams.get('status') ?? 'pending') as AdminReviewStatusFilter;
+const status: AdminReviewStatusFilter = (['pending', 'approved', 'rejected', 'all'] as const).includes(statusParam)
+  ? statusParam
+  : 'pending';
+
+const reviews = await getReviewsByStatus(env.DB, status);
 const formatDate = (value: string) =>
-  new Date(value.replace(' ', 'T') + 'Z').toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+  new Date(value.replace(' ', 'T') + 'Z').toLocaleString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+const statusBadgeClass = {
+  pending: 'bg-amber-100 text-amber-700',
+  approved: 'bg-green-100 text-green-700',
+  rejected: 'bg-red-100 text-red-700',
+} as const;
+const statusLabel = { pending: '대기', approved: '승인됨', rejected: '거절됨' } as const;
+
+const tabs: { value: AdminReviewStatusFilter; label: string }[] = [
+  { value: 'pending', label: '대기' },
+  { value: 'approved', label: '승인됨' },
+  { value: 'rejected', label: '거절됨' },
+  { value: 'all', label: '전체' },
+];
 ---
 
 <Layout title="리뷰 관리" description="사용자 리뷰 승인 관리" canonicalPath="/dashboard/reviews" noindex>
   <div class="flex items-center justify-between">
-    <h1 class="text-xl font-bold text-slate-900">승인 대기 중인 리뷰 ({pendingReviews.length})</h1>
+    <h1 class="text-xl font-bold text-slate-900">리뷰 관리</h1>
     <div class="flex gap-4 text-sm">
       <a href="/dashboard" class="text-slate-400 underline hover:text-slate-700">사이트 관리</a>
       <a href="/dashboard/stats" class="text-slate-400 underline hover:text-slate-700">통계</a>
     </div>
   </div>
 
-  {pendingReviews.length === 0 ? (
-    <p class="mt-8 text-slate-400">대기 중인 리뷰가 없습니다.</p>
+  <p class="mt-2 text-xs text-slate-400">
+    삭제한 리뷰도 신고·분쟁 대응을 위해 IP·작성 시각 등 기록은 별도로 보관됩니다.
+  </p>
+
+  <div class="mt-4 flex flex-wrap gap-2">
+    {tabs.map((tab) => (
+      <a
+        href={`/dashboard/reviews?status=${tab.value}`}
+        class={`rounded-full px-3 py-1.5 text-sm font-medium ${
+          status === tab.value ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+        }`}
+      >
+        {tab.label}
+      </a>
+    ))}
+  </div>
+
+  {reviews.length === 0 ? (
+    <p class="mt-8 text-slate-400">해당하는 리뷰가 없습니다.</p>
   ) : (
     <ul class="mt-6 space-y-3">
-      {pendingReviews.map((review) => (
+      {reviews.map((review) => (
         <li class="rounded-lg border border-slate-200 bg-white p-4">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p class="font-semibold text-slate-900">
                 <a href={`/site/${review.site_slug}`} class="hover:underline">{review.site_name}</a>
                 <span class="ml-2 text-amber-500 text-sm">{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</span>
+                <span class={`ml-2 rounded-full px-2 py-0.5 text-xs ${statusBadgeClass[review.status]}`}>{statusLabel[review.status]}</span>
               </p>
               <p class="mt-1 text-sm text-slate-600 whitespace-pre-line break-words">{review.comment}</p>
-              <p class="mt-1 text-xs text-slate-400">{review.author_name || '익명'} · {formatDate(review.created_at)}</p>
+              <p class="mt-1 text-xs text-slate-400">
+                {review.author_name || '익명'} · {formatDate(review.created_at)}
+                {review.ip_address && ` · IP ${review.ip_address}`}
+              </p>
             </div>
             <div class="flex gap-2 shrink-0">
+              {review.status !== 'approved' && (
+                <form method="post">
+                  <input type="hidden" name="action" value="approve" />
+                  <input type="hidden" name="id" value={review.id} />
+                  <button type="submit" class="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-500">승인</button>
+                </form>
+              )}
+              {review.status !== 'rejected' && (
+                <form method="post">
+                  <input type="hidden" name="action" value="reject" />
+                  <input type="hidden" name="id" value={review.id} />
+                  <button type="submit" class="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500">거절</button>
+                </form>
+              )}
               <form method="post">
-                <input type="hidden" name="action" value="approve" />
+                <input type="hidden" name="action" value="delete" />
                 <input type="hidden" name="id" value={review.id} />
-                <button type="submit" class="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-500">승인</button>
-              </form>
-              <form method="post">
-                <input type="hidden" name="action" value="reject" />
-                <input type="hidden" name="id" value={review.id} />
-                <button type="submit" class="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500">거절</button>
+                <button type="submit" class="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50">
+                  완전 삭제
+                </button>
               </form>
             </div>
           </div>

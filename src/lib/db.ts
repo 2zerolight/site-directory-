@@ -1,4 +1,4 @@
-import type { Category, CategoryWithCount, Review, ReviewWithSite, Site, SiteWithCategory, Subcategory, Tag } from '../types';
+import type { Category, CategoryWithCount, Review, ReviewStatus, ReviewWithSite, Site, SiteWithCategory, Subcategory, Tag } from '../types';
 
 const PAGE_SIZE = 24;
 export { PAGE_SIZE };
@@ -613,12 +613,61 @@ export interface ReviewInput {
   rating: number;
   authorName: string | null;
   comment: string;
+  ipAddress: string | null;
+  userAgent: string | null;
 }
 
 export async function insertReview(db: D1Database, data: ReviewInput): Promise<void> {
+  const result = await db
+    .prepare(
+      `INSERT INTO reviews (site_id, rating, author_name, comment, status, ip_address, user_agent)
+       VALUES (?, ?, ?, ?, 'pending', ?, ?)`
+    )
+    .bind(data.siteId, data.rating, data.authorName, data.comment, data.ipAddress, data.userAgent)
+    .run();
+
+  await logReviewEvent(db, {
+    reviewId: result.meta.last_row_id,
+    siteId: data.siteId,
+    event: 'submitted',
+    rating: data.rating,
+    authorName: data.authorName,
+    comment: data.comment,
+    ipAddress: data.ipAddress,
+    userAgent: data.userAgent,
+    actor: 'visitor',
+  });
+}
+
+interface ReviewAuditEntry {
+  reviewId: number;
+  siteId: number;
+  event: 'submitted' | 'approved' | 'rejected' | 'deleted';
+  rating: number;
+  authorName: string | null;
+  comment: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  actor: string;
+}
+
+async function logReviewEvent(db: D1Database, entry: ReviewAuditEntry): Promise<void> {
   await db
-    .prepare(`INSERT INTO reviews (site_id, rating, author_name, comment, status) VALUES (?, ?, ?, ?, 'pending')`)
-    .bind(data.siteId, data.rating, data.authorName, data.comment)
+    .prepare(
+      `INSERT INTO review_audit_log (review_id, site_id, event, rating, author_name, comment, ip_address, user_agent, actor)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      entry.reviewId,
+      entry.siteId,
+      entry.event,
+      entry.rating,
+      entry.authorName,
+      entry.comment,
+      entry.ipAddress,
+      entry.userAgent,
+      entry.actor
+    )
     .run();
 }
 
@@ -638,20 +687,64 @@ export async function getReviewStats(db: D1Database, siteId: number): Promise<{ 
   return { avg: row?.avg ?? 0, count: row?.count ?? 0 };
 }
 
-export async function getPendingReviews(db: D1Database): Promise<ReviewWithSite[]> {
+export type AdminReviewStatusFilter = ReviewStatus | 'all';
+
+export async function getReviewsByStatus(
+  db: D1Database,
+  status: AdminReviewStatusFilter,
+  limit = 50
+): Promise<ReviewWithSite[]> {
+  const where = status === 'all' ? '' : 'WHERE r.status = ?';
+  const args = status === 'all' ? [] : [status];
   const { results } = await db
     .prepare(
       `SELECT r.*, s.name AS site_name, s.slug AS site_slug
        FROM reviews r JOIN sites s ON s.id = r.site_id
-       WHERE r.status = 'pending'
-       ORDER BY r.created_at ASC`
+       ${where}
+       ORDER BY r.created_at DESC
+       LIMIT ?`
     )
+    .bind(...args, limit)
     .all<ReviewWithSite>();
   return results;
 }
 
 export async function setReviewStatus(db: D1Database, id: number, status: 'approved' | 'rejected'): Promise<void> {
+  const review = await db.prepare('SELECT * FROM reviews WHERE id = ?').bind(id).first<Review>();
+  if (!review) return;
+
   await db.prepare('UPDATE reviews SET status = ? WHERE id = ?').bind(status, id).run();
+
+  await logReviewEvent(db, {
+    reviewId: review.id,
+    siteId: review.site_id,
+    event: status,
+    rating: review.rating,
+    authorName: review.author_name,
+    comment: review.comment,
+    ipAddress: review.ip_address,
+    userAgent: review.user_agent,
+    actor: 'admin',
+  });
+}
+
+export async function deleteReview(db: D1Database, id: number): Promise<void> {
+  const review = await db.prepare('SELECT * FROM reviews WHERE id = ?').bind(id).first<Review>();
+  if (!review) return;
+
+  await logReviewEvent(db, {
+    reviewId: review.id,
+    siteId: review.site_id,
+    event: 'deleted',
+    rating: review.rating,
+    authorName: review.author_name,
+    comment: review.comment,
+    ipAddress: review.ip_address,
+    userAgent: review.user_agent,
+    actor: 'admin',
+  });
+
+  await db.prepare('DELETE FROM reviews WHERE id = ?').bind(id).run();
 }
 
 // ---- Bookmarks ----
