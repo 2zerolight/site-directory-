@@ -10,12 +10,14 @@ interface Props {
   canonicalPath: string;
   jsonLd?: Record<string, unknown> | Record<string, unknown>[];
   noindex?: boolean;
+  image?: string;
 }
 
-const { title, description, canonicalPath, jsonLd, noindex = false } = Astro.props;
+const { title, description, canonicalPath, jsonLd, noindex = false, image } = Astro.props;
 const canonicalUrl = new URL(canonicalPath, SITE_URL).toString();
 const fullTitle = title === SITE_NAME ? title : `${title} | ${SITE_NAME}`;
 const jsonLdBlocks = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
+const ogImageUrl = new URL(image || '/og-image.png', SITE_URL).toString();
 ---
 
 <!doctype html>
@@ -35,10 +37,12 @@ const jsonLdBlocks = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     <meta property="og:title" content={fullTitle} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={ogImageUrl} />
 
-    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={fullTitle} />
     <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImageUrl} />
 
     {jsonLdBlocks.map((block) => (
       <script type="application/ld+json" set:html={JSON.stringify(block)} is:inline />
