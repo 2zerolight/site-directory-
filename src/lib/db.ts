@@ -131,6 +131,20 @@ export async function getSiteBySlug(db: D1Database, slug: string): Promise<SiteW
   return row ?? null;
 }
 
+export async function findSiteByUrlHost(db: D1Database, hostname: string): Promise<SiteWithCategory | null> {
+  const normalized = hostname.toLowerCase().replace(/^www\./, '');
+  const row = await db
+    .prepare(
+      `SELECT ${SITE_WITH_CATEGORY_SELECT} ${SITE_WITH_CATEGORY_JOIN}
+       WHERE REPLACE(LOWER(s.url), '://www.', '://') LIKE '%://' || ? || '%'
+       ORDER BY s.status = 'approved' DESC
+       LIMIT 1`
+    )
+    .bind(normalized)
+    .first<SiteWithCategory>();
+  return row ?? null;
+}
+
 export async function getRecentApprovedSites(db: D1Database, limit = 12): Promise<SiteWithCategory[]> {
   const { results } = await db
     .prepare(

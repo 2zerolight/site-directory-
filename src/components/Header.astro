@@ -5,7 +5,7 @@ const q = Astro.url.searchParams.get('q') ?? '';
 ---
 
 <header class="border-b border-slate-200 bg-white">
-  <div class="max-w-6xl mx-auto px-4 py-4 flex flex-nowrap items-center gap-2 sm:gap-4 justify-between">
+  <div class="max-w-6xl mx-auto px-4 py-4 flex flex-nowrap items-center gap-2 sm:gap-4">
     <a href="/" class="shrink-0 text-lg font-bold tracking-tight text-slate-900">
       {SITE_NAME}
     </a>
@@ -27,16 +27,18 @@ const q = Astro.url.searchParams.get('q') ?? '';
       ></ul>
     </form>
 
-    <a href="/bookmarks" aria-label="즐겨찾기" class="shrink-0 rounded-md border border-slate-200 px-2.5 py-2 text-sm text-slate-500 hover:border-slate-400 hover:text-amber-500">
-      ★
-    </a>
+    <div class="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+      <a href="/bookmarks" aria-label="즐겨찾기" class="shrink-0 rounded-md border border-slate-200 px-2.5 py-2 text-sm text-slate-500 hover:border-slate-400 hover:text-amber-500">
+        ★
+      </a>
 
-    <a
-      href="/submit"
-      class="shrink-0 whitespace-nowrap rounded-md bg-slate-900 px-3 py-2 text-xs sm:px-4 sm:text-sm font-medium text-white hover:bg-slate-700"
-    >
-      사이트 등록
-    </a>
+      <a
+        href="/submit"
+        class="shrink-0 whitespace-nowrap rounded-md bg-slate-900 px-3 py-2 text-xs sm:px-4 sm:text-sm font-medium text-white hover:bg-slate-700"
+      >
+        사이트 등록
+      </a>
+    </div>
   </div>
 </header>
 

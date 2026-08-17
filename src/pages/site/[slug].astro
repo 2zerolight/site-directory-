@@ -207,6 +207,17 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
         >
           <span data-bookmark-icon>☆</span>
         </button>
+        <button
+          type="button"
+          data-share-button
+          data-share-title={site.name}
+          data-share-text={site.tagline}
+          data-share-url={new URL(`/site/${site.slug}`, SITE_URL).toString()}
+          class="shrink-0 rounded-md border border-slate-200 px-3 py-2.5 text-sm text-slate-500 hover:border-slate-400 hover:text-slate-900"
+          aria-label="공유하기"
+        >
+          <span data-share-label>공유</span>
+        </button>
         <a
           href={`/go/${site.slug}`}
           target="_blank"

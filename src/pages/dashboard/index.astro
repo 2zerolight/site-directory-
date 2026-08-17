@@ -60,6 +60,25 @@ if (Astro.request.method === 'POST') {
         return Astro.redirect(`${backTo}#site-${id}`);
       }
 
+      if (action === 'bulk_approve' || action === 'bulk_reject') {
+        const ids = data
+          .getAll('ids')
+          .map((v) => Number(v))
+          .filter((n) => Number.isInteger(n) && n > 0);
+        const status = action === 'bulk_approve' ? 'approved' : 'rejected';
+
+        await Promise.all(
+          ids.map(async (siteId) => {
+            if (status === 'approved') {
+              const site = await getSiteById(env.DB, siteId);
+              if (site) await checkSiteHealth(env.DB, siteId, site.url);
+            }
+            await setSiteStatus(env.DB, siteId, status);
+          })
+        );
+        return Astro.redirect(backTo);
+      }
+
       if (id && action === 'verify_admin') {
         await adminVerifyOwnership(env.DB, id);
         return Astro.redirect(`${backTo}#site-${id}`);
@@ -244,11 +263,33 @@ const tabs: { value: AdminSiteStatusFilter; label: string }[] = [
               {listResult.sites.length === 0 ? (
                 <p class="mt-8 text-slate-400">조건에 맞는 사이트가 없습니다.</p>
               ) : (
-                <ul class="mt-3 space-y-3">
-                  {listResult.sites.map((site) => (
-                    <AdminSiteCard site={site} categories={categories} subcategories={subcategories} redirectTo={currentQueryString} />
-                  ))}
-                </ul>
+                <>
+                  <form id="bulk-form" method="post">
+                    <input type="hidden" name="redirectTo" value={currentQueryString} />
+                  </form>
+
+                  <div class="mt-4 flex items-center gap-3 text-sm">
+                    <label class="flex items-center gap-1.5 text-slate-600">
+                      <input type="checkbox" id="select-all" />
+                      전체 선택
+                    </label>
+                    <span id="selected-count" class="text-slate-400"></span>
+                    <div class="ml-auto flex gap-2">
+                      <button type="submit" form="bulk-form" name="action" value="bulk_approve" class="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-500">
+                        선택 승인
+                      </button>
+                      <button type="submit" form="bulk-form" name="action" value="bulk_reject" class="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500">
+                        선택 거절
+                      </button>
+                    </div>
+                  </div>
+
+                  <ul class="mt-3 space-y-3">
+                    {listResult.sites.map((site) => (
+                      <AdminSiteCard site={site} categories={categories} subcategories={subcategories} redirectTo={currentQueryString} />
+                    ))}
+                  </ul>
+                </>
               )}
             </>
           )}
@@ -270,5 +311,24 @@ const tabs: { value: AdminSiteStatusFilter; label: string }[] = [
         input.value = withDefaultProtocol(input.value);
       });
     });
+
+    const selectAll = document.getElementById('select-all') as HTMLInputElement | null;
+    const selectedCount = document.getElementById('selected-count');
+    const itemCheckboxes = () =>
+      Array.from(document.querySelectorAll<HTMLInputElement>('input[name="ids"][form="bulk-form"]'));
+
+    function updateSelectedCount() {
+      const n = itemCheckboxes().filter((cb) => cb.checked).length;
+      if (selectedCount) selectedCount.textContent = n > 0 ? `${n}개 선택됨` : '';
+    }
+
+    selectAll?.addEventListener('change', () => {
+      itemCheckboxes().forEach((cb) => {
+        cb.checked = selectAll.checked;
+      });
+      updateSelectedCount();
+    });
+
+    itemCheckboxes().forEach((cb) => cb.addEventListener('change', updateSelectedCount));
   </script>
 </Layout>

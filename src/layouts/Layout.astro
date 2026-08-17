@@ -102,6 +102,46 @@ const ogImageUrl = new URL(image || '/og-image.png', SITE_URL).toString();
 
       initBookmarkButtons();
       document.addEventListener('astro:page-load', initBookmarkButtons);
+
+      function initShareButtons() {
+        document.querySelectorAll<HTMLElement>('[data-share-button]').forEach((el) => {
+          if (el.dataset.shareBound) return;
+          el.dataset.shareBound = '1';
+          el.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const url = el.dataset.shareUrl || location.href;
+            const title = el.dataset.shareTitle || document.title;
+            const text = el.dataset.shareText || '';
+            const label = el.querySelector('[data-share-label]');
+
+            if (navigator.share) {
+              try {
+                await navigator.share({ title, text, url });
+              } catch {
+                // user cancelled or share failed silently
+              }
+              return;
+            }
+
+            try {
+              await navigator.clipboard.writeText(url);
+              if (label) {
+                const original = label.textContent;
+                label.textContent = '복사됨!';
+                setTimeout(() => {
+                  label.textContent = original;
+                }, 1500);
+              }
+            } catch {
+              // clipboard unavailable; nothing more we can do
+            }
+          });
+        });
+      }
+
+      initShareButtons();
+      document.addEventListener('astro:page-load', initShareButtons);
     </script>
   </body>
 </html>

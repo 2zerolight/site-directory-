@@ -51,6 +51,7 @@ const statusBadgeClass = {
   <div class="flex flex-nowrap items-start justify-between gap-3">
     <div class="min-w-0">
       <p class="font-semibold text-slate-900">
+        <input type="checkbox" name="ids" value={site.id} form="bulk-form" class="mr-1.5 align-middle" aria-label={`${site.name} 선택`} />
         {site.name}
         <span class="ml-2 text-xs text-slate-400">
           {site.category_name}{site.subcategory_name ? ` · ${site.subcategory_name}` : ''}
