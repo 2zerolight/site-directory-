@@ -64,6 +64,8 @@ CREATE TABLE sites (
   ownership_verified INTEGER NOT NULL DEFAULT 0,
   verification_token TEXT,
   verification_method TEXT CHECK (verification_method IN ('meta_tag', 'dns_txt') OR verification_method IS NULL),
+  third_party_submission INTEGER NOT NULL DEFAULT 0,
+  verified_by_admin INTEGER NOT NULL DEFAULT 0,
   last_checked_at TEXT,
   verified_at TEXT,
 

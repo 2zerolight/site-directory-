@@ -332,6 +332,89 @@ export async function checkSiteHealth(db: D1Database, id: number, url: string): 
     .run();
 }
 
+export interface SiteUpdateInput {
+  name: string;
+  url: string;
+  tagline: string;
+  description: string;
+  logoUrl: string | null;
+  coverImageUrl: string | null;
+  categoryId: number;
+  subcategoryId: number | null;
+  region: string | null;
+  siteType: string | null;
+  platform: string | null;
+  mainKeywords: string | null;
+  serviceKeywords: string | null;
+  operatorName: string | null;
+  businessName: string | null;
+  serviceRegion: string | null;
+  customerCenter: string | null;
+  contactEmail: string | null;
+  blogUrl: string | null;
+  youtubeUrl: string | null;
+  instagramUrl: string | null;
+  facebookUrl: string | null;
+  otherSnsUrl: string | null;
+}
+
+export async function updateSiteFields(db: D1Database, id: number, data: SiteUpdateInput): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE sites SET
+        name = ?, url = ?, tagline = ?, description = ?, logo_url = ?, cover_image_url = ?,
+        category_id = ?, subcategory_id = ?, region = ?, site_type = ?, platform = ?,
+        main_keywords = ?, service_keywords = ?,
+        operator_name = ?, business_name = ?, service_region = ?, customer_center = ?, contact_email = ?,
+        blog_url = ?, youtube_url = ?, instagram_url = ?, facebook_url = ?, other_sns_url = ?,
+        updated_at = datetime('now')
+      WHERE id = ?`
+    )
+    .bind(
+      data.name,
+      data.url,
+      data.tagline,
+      data.description,
+      data.logoUrl,
+      data.coverImageUrl,
+      data.categoryId,
+      data.subcategoryId,
+      data.region,
+      data.siteType,
+      data.platform,
+      data.mainKeywords,
+      data.serviceKeywords,
+      data.operatorName,
+      data.businessName,
+      data.serviceRegion,
+      data.customerCenter,
+      data.contactEmail,
+      data.blogUrl,
+      data.youtubeUrl,
+      data.instagramUrl,
+      data.facebookUrl,
+      data.otherSnsUrl,
+      id
+    )
+    .run();
+}
+
+export async function adminVerifyOwnership(db: D1Database, id: number): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE sites SET ownership_verified = 1, verified_by_admin = 1, verified_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`
+    )
+    .bind(id)
+    .run();
+}
+
+export async function markThirdPartySubmission(db: D1Database, id: number): Promise<void> {
+  await db
+    .prepare(`UPDATE sites SET third_party_submission = 1, updated_at = datetime('now') WHERE id = ?`)
+    .bind(id)
+    .run();
+}
+
 export async function incrementViewCount(db: D1Database, id: number): Promise<void> {
   await db.prepare('UPDATE sites SET view_count = view_count + 1 WHERE id = ?').bind(id).run();
 }

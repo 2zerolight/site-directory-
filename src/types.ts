@@ -60,6 +60,8 @@ export interface Site {
   ownership_verified: number;
   verification_token: string | null;
   verification_method: VerificationMethod;
+  third_party_submission: number;
+  verified_by_admin: number;
   last_checked_at: string | null;
   verified_at: string | null;
 

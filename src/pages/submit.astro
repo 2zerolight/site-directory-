@@ -5,6 +5,7 @@ import FormSection from '../components/FormSection.astro';
 import { getCategories, getAllSubcategories, insertSiteSubmission } from '../lib/db';
 import { slugify } from '../lib/slugify';
 import { generateVerificationToken } from '../lib/verify';
+import { normalizeRequiredUrl, normalizeOptionalUrl } from '../lib/urls';
 import { REGIONS, SITE_TYPES, PLATFORMS } from '../lib/constants';
 import type { Category, Subcategory } from '../types';
 
@@ -16,6 +17,7 @@ for (const sub of subcategories) {
   list.push(sub);
   subcategoriesByCategory.set(sub.category_id, list);
 }
+const snsCategoryId = categories.find((c) => c.slug === 'sns-celebrity')?.id ?? null;
 
 type FormValues = {
   name: string;
@@ -56,26 +58,6 @@ const emptyValues: FormValues = {
 let errorMessage = '';
 let formValues: FormValues = emptyValues;
 let redirectSlug = '';
-
-function normalizeRequiredUrl(raw: string): URL | null {
-  try {
-    const u = new URL(raw.trim());
-    return ['http:', 'https:'].includes(u.protocol) ? u : null;
-  } catch {
-    return null;
-  }
-}
-
-function normalizeOptionalUrl(raw: string): { ok: boolean; value: string | null } {
-  const trimmed = raw.trim();
-  if (!trimmed) return { ok: true, value: null };
-  try {
-    const u = new URL(trimmed);
-    return ['http:', 'https:'].includes(u.protocol) ? { ok: true, value: u.toString() } : { ok: false, value: null };
-  } catch {
-    return { ok: false, value: null };
-  }
-}
 
 if (Astro.request.method === 'POST') {
   const data = await Astro.request.formData();
@@ -263,10 +245,11 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
       </FormSection>
 
       <FormSection index={2} title="분류" description="방문자가 카테고리로 사이트를 찾을 수 있도록 분류해주세요.">
+        <script type="application/json" id="subcategory-data" is:inline set:html={JSON.stringify(subcategories)} />
         <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div>
             <label class={labelClass} for="categoryId"><span>대분류<span class="ml-0.5 text-rose-500">*</span></span></label>
-            <select id="categoryId" name="categoryId" required class={inputClass}>
+            <select id="categoryId" name="categoryId" required class={inputClass} data-sns-category-id={snsCategoryId ?? ''}>
               <option value="">선택해주세요</option>
               {categories.map((c: Category) => (
                 <option value={c.id} selected={String(c.id) === formValues.categoryId}>{c.name}</option>
@@ -275,7 +258,7 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
           </div>
           <div>
             <label class={labelClass} for="subcategoryId"><span>중분류</span></label>
-            <select id="subcategoryId" name="subcategoryId" class={inputClass}>
+            <select id="subcategoryId" name="subcategoryId" class={inputClass} data-selected={formValues.subcategoryId}>
               <option value="">선택 안 함</option>
               {categories.map((c: Category) => (
                 <optgroup label={c.name}>
@@ -285,7 +268,7 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
                 </optgroup>
               ))}
             </select>
-            <p class={hintClass}>선택한 대분류에 속한 중분류를 골라주세요.</p>
+            <p class={hintClass}>대분류를 먼저 선택해주세요.</p>
           </div>
         </div>
 
@@ -308,11 +291,16 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
 
         <div>
           <label class={labelClass} for="platform"><span>플랫폼</span></label>
-          <select id="platform" name="platform" class={inputClass}>
+          <select
+            id="platform"
+            name="platform"
+            class={`${inputClass} disabled:cursor-not-allowed disabled:opacity-50`}
+            disabled={String(snsCategoryId ?? '') !== formValues.categoryId}
+          >
             <option value="">선택 안 함</option>
             {PLATFORMS.map((p) => <option value={p} selected={p === formValues.platform}>{p}</option>)}
           </select>
-          <p class={hintClass}>SNS 계정 등록 시 사용 중인 플랫폼을 선택해주세요.</p>
+          <p class={hintClass}>대분류를 "SNS"로 선택하면 사용 중인 플랫폼을 고를 수 있어요.</p>
         </div>
       </FormSection>
 
@@ -420,6 +408,49 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
     }
     bindCounter('tagline', 'tagline-count', 120);
     bindCounter('description', 'description-count', 2000);
+
+    const categorySelect = document.getElementById('categoryId') as HTMLSelectElement | null;
+    const subcategorySelect = document.getElementById('subcategoryId') as HTMLSelectElement | null;
+    const subcategoryDataEl = document.getElementById('subcategory-data');
+    const platformSelect = document.getElementById('platform') as HTMLSelectElement | null;
+
+    type SubcategoryRow = { id: number; category_id: number; name: string };
+
+    if (categorySelect && subcategorySelect && subcategoryDataEl) {
+      const allSubcategories: SubcategoryRow[] = JSON.parse(subcategoryDataEl.textContent || '[]');
+      const initialSelected = subcategorySelect.dataset.selected ?? '';
+
+      function renderSubcategories(categoryId: string, selectedId: string) {
+        const matching = allSubcategories.filter((s) => String(s.category_id) === categoryId);
+        subcategorySelect!.innerHTML = '';
+        const noneOpt = document.createElement('option');
+        noneOpt.value = '';
+        noneOpt.textContent = '선택 안 함';
+        subcategorySelect!.appendChild(noneOpt);
+        for (const sub of matching) {
+          const opt = document.createElement('option');
+          opt.value = String(sub.id);
+          opt.textContent = sub.name;
+          if (String(sub.id) === selectedId) opt.selected = true;
+          subcategorySelect!.appendChild(opt);
+        }
+        subcategorySelect!.disabled = matching.length === 0;
+      }
+
+      renderSubcategories(categorySelect.value, initialSelected);
+      categorySelect.addEventListener('change', () => renderSubcategories(categorySelect.value, ''));
+    }
+
+    if (categorySelect && platformSelect) {
+      const snsCategoryId = categorySelect.dataset.snsCategoryId ?? '';
+      function syncPlatformEnabled() {
+        const isSns = snsCategoryId !== '' && categorySelect!.value === snsCategoryId;
+        platformSelect!.disabled = !isSns;
+        if (!isSns) platformSelect!.value = '';
+      }
+      syncPlatformEnabled();
+      categorySelect.addEventListener('change', syncPlatformEnabled);
+    }
 
     const autofillBtn = document.getElementById('autofill-btn') as HTMLButtonElement | null;
     const autofillStatus = document.getElementById('autofill-status');
