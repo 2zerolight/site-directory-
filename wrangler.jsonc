@@ -3,7 +3,6 @@
   "name": "site-directory",
   "compatibility_date": "2025-08-01",
   "compatibility_flags": ["nodejs_compat"],
-  "pages_build_output_dir": "./dist",
   "d1_databases": [
     {
       "binding": "DB",
