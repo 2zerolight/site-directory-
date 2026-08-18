@@ -500,6 +500,17 @@ export async function updateSiteFields(db: D1Database, id: number, data: SiteUpd
     .run();
 }
 
+export async function bulkMoveCategory(db: D1Database, ids: number[], categoryId: number): Promise<void> {
+  if (ids.length === 0) return;
+  const placeholders = ids.map(() => '?').join(',');
+  await db
+    .prepare(
+      `UPDATE sites SET category_id = ?, subcategory_id = NULL, updated_at = datetime('now') WHERE id IN (${placeholders})`
+    )
+    .bind(categoryId, ...ids)
+    .run();
+}
+
 export async function adminVerifyOwnership(db: D1Database, id: number): Promise<void> {
   await db
     .prepare(

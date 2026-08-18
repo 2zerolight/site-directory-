@@ -12,6 +12,7 @@ import {
   getSitesForAdmin,
   getSiteById,
   setSiteTags,
+  bulkMoveCategory,
   type AdminSiteStatusFilter,
 } from '../../lib/db';
 import { normalizeRequiredUrl, normalizeOptionalUrl } from '../../lib/urls';
@@ -76,6 +77,18 @@ if (Astro.request.method === 'POST') {
             await setSiteStatus(env.DB, siteId, status);
           })
         );
+        return Astro.redirect(backTo);
+      }
+
+      if (action === 'bulk_move_category') {
+        const ids = data
+          .getAll('ids')
+          .map((v) => Number(v))
+          .filter((n) => Number.isInteger(n) && n > 0);
+        const categoryId = Number(data.get('categoryId'));
+        if (ids.length > 0 && categoryId) {
+          await bulkMoveCategory(env.DB, ids, categoryId);
+        }
         return Astro.redirect(backTo);
       }
 
@@ -201,6 +214,7 @@ const tabs: { value: AdminSiteStatusFilter; label: string }[] = [
     </div>
   ) : (
     <div>
+      <script type="application/json" id="all-subcategories-data" is:inline set:html={JSON.stringify(subcategories)} />
       <div class="flex items-center justify-between">
         <h1 class="text-xl font-bold text-slate-900">사이트 관리</h1>
         <div class="flex items-center gap-4 text-sm">
@@ -268,13 +282,22 @@ const tabs: { value: AdminSiteStatusFilter; label: string }[] = [
                     <input type="hidden" name="redirectTo" value={currentQueryString} />
                   </form>
 
-                  <div class="mt-4 flex items-center gap-3 text-sm">
+                  <div class="mt-4 flex flex-wrap items-center gap-3 text-sm">
                     <label class="flex items-center gap-1.5 text-slate-600">
                       <input type="checkbox" id="select-all" />
                       전체 선택
                     </label>
                     <span id="selected-count" class="text-slate-400"></span>
-                    <div class="ml-auto flex gap-2">
+                    <div class="ml-auto flex flex-wrap items-center gap-2">
+                      <select
+                        name="categoryId" form="bulk-form"
+                        class="rounded-md border border-slate-300 px-2 py-1.5 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      >
+                        {categories.map((c) => <option value={c.id}>{c.name}</option>)}
+                      </select>
+                      <button type="submit" form="bulk-form" name="action" value="bulk_move_category" class="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+                        카테고리 이동
+                      </button>
                       <button type="submit" form="bulk-form" name="action" value="bulk_approve" class="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-500">
                         선택 승인
                       </button>
@@ -330,5 +353,32 @@ const tabs: { value: AdminSiteStatusFilter; label: string }[] = [
     });
 
     itemCheckboxes().forEach((cb) => cb.addEventListener('change', updateSelectedCount));
+
+    type SubcategoryRow = { id: number; category_id: number; name: string };
+
+    const subcategoryDataEl = document.getElementById('all-subcategories-data');
+    const allSubcategories: SubcategoryRow[] = subcategoryDataEl ? JSON.parse(subcategoryDataEl.textContent || '[]') : [];
+
+    document.addEventListener('change', (e) => {
+      const target = e.target as HTMLElement;
+      if (!(target instanceof HTMLSelectElement) || target.name !== 'categoryId') return;
+
+      const form = target.closest('form');
+      const subcategorySelect = form?.querySelector('select[name="subcategoryId"]') as HTMLSelectElement | null | undefined;
+      if (!subcategorySelect) return;
+
+      const matching = allSubcategories.filter((s) => String(s.category_id) === target.value);
+      subcategorySelect.innerHTML = '';
+      const noneOpt = document.createElement('option');
+      noneOpt.value = '';
+      noneOpt.textContent = '선택 안 함';
+      subcategorySelect.appendChild(noneOpt);
+      for (const sub of matching) {
+        const opt = document.createElement('option');
+        opt.value = String(sub.id);
+        opt.textContent = sub.name;
+        subcategorySelect.appendChild(opt);
+      }
+    });
   </script>
 </Layout>
