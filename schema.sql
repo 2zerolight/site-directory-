@@ -74,6 +74,7 @@ CREATE TABLE sites (
   submitted_email TEXT,
   view_count INTEGER NOT NULL DEFAULT 0,
   click_count INTEGER NOT NULL DEFAULT 0,
+  helpful_count INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   approved_at TEXT

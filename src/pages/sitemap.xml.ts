@@ -16,7 +16,7 @@ function urlEntry(path: string, lastmod: string | null): string {
 export const GET: APIRoute = async () => {
   const { sites, categories, tags } = await getSitemapData(env.DB);
 
-  const staticEntries = ['/', '/search', '/submit'].map((path) => urlEntry(path, null));
+  const staticEntries = ['/', '/search', '/submit', '/faq', '/updates'].map((path) => urlEntry(path, null));
   const categoryEntries = categories.map((c) => urlEntry(`/category/${c.slug}`, toLastmod(c.last_update)));
   const tagEntries = tags.map((t) => urlEntry(`/tag/${t.slug}`, toLastmod(t.last_update)));
   const siteEntries = sites.map((s) => urlEntry(`/site/${s.slug}`, toLastmod(s.updated_at)));

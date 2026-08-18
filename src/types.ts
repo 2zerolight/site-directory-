@@ -69,6 +69,7 @@ export interface Site {
   submitted_email: string | null;
   view_count: number;
   click_count: number;
+  helpful_count: number;
   created_at: string;
   updated_at: string;
   approved_at: string | null;

@@ -324,9 +324,19 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
 
     {isApproved && (
       <div class="mt-6 border-t border-slate-100 pt-6">
-      <h2 class="text-sm font-semibold text-slate-900">
-        리뷰 {reviewStats.count > 0 && <span class="text-slate-400 font-normal">({reviewStats.count})</span>}
-      </h2>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-sm font-semibold text-slate-900">
+          리뷰 {reviewStats.count > 0 && <span class="text-slate-400 font-normal">({reviewStats.count})</span>}
+        </h2>
+        <button
+          type="button"
+          data-helpful-button
+          data-site-id={site.id}
+          class="flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:border-slate-400 hover:text-slate-900"
+        >
+          👍 <span>유용해요</span> <span data-helpful-count>{site.helpful_count > 0 ? `(${site.helpful_count})` : ''}</span>
+        </button>
+      </div>
 
       {reviews.length === 0 ? (
         <p class="mt-3 text-sm text-slate-400">아직 리뷰가 없습니다. 첫 리뷰를 남겨보세요.</p>

@@ -145,6 +145,14 @@ export async function findSiteByUrlHost(db: D1Database, hostname: string): Promi
   return row ?? null;
 }
 
+export async function getPublicStats(db: D1Database): Promise<{ totalSites: number; totalCategories: number }> {
+  const [sites, categories] = await Promise.all([
+    db.prepare(`SELECT COUNT(*) AS n FROM sites WHERE status = 'approved'`).first<{ n: number }>(),
+    db.prepare('SELECT COUNT(*) AS n FROM categories').first<{ n: number }>(),
+  ]);
+  return { totalSites: sites?.n ?? 0, totalCategories: categories?.n ?? 0 };
+}
+
 export async function getRecentApprovedSites(db: D1Database, limit = 12): Promise<SiteWithCategory[]> {
   const { results } = await db
     .prepare(
@@ -260,6 +268,13 @@ export async function getSiteById(db: D1Database, id: number): Promise<SiteWithC
 }
 
 export type AdminSiteStatusFilter = 'pending' | 'approved' | 'rejected' | 'all';
+
+export async function getAllSitesForExport(db: D1Database): Promise<SiteWithCategory[]> {
+  const { results } = await db
+    .prepare(`SELECT ${SITE_WITH_CATEGORY_SELECT} ${SITE_WITH_CATEGORY_JOIN} ORDER BY s.id ASC`)
+    .all<SiteWithCategory>();
+  return results;
+}
 
 export async function getSitesForAdmin(
   db: D1Database,
@@ -507,6 +522,14 @@ export async function incrementViewCount(db: D1Database, id: number): Promise<vo
 
 export async function incrementClickCount(db: D1Database, id: number): Promise<void> {
   await db.prepare('UPDATE sites SET click_count = click_count + 1 WHERE id = ?').bind(id).run();
+}
+
+export async function incrementHelpfulCount(db: D1Database, id: number): Promise<number | null> {
+  const result = await db
+    .prepare('UPDATE sites SET helpful_count = helpful_count + 1 WHERE id = ? AND status = \'approved\' RETURNING helpful_count')
+    .bind(id)
+    .first<{ helpful_count: number }>();
+  return result?.helpful_count ?? null;
 }
 
 // ---- Tags ----

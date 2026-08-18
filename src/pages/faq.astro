@@ -1,0 +1,70 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { SITE_NAME } from '../lib/site';
+
+const faqs = [
+  {
+    q: `${SITE_NAME}는 어떤 서비스인가요?`,
+    a: '분야별로 국내 웹사이트를 검색하고 발견할 수 있는 디렉토리 플랫폼입니다. 포털/검색, IT/개발, 쇼핑, 공공서비스 등 20개 카테고리로 실제 존재하는 사이트들을 정리해서 보여드립니다.',
+  },
+  {
+    q: '사이트 등록은 어떻게 하나요?',
+    a: '상단의 "사이트 등록" 버튼을 눌러 URL과 기본 정보를 입력하면 됩니다. URL만 입력하고 "자동 채우기"를 누르면 이름·소개·로고 등을 자동으로 불러올 수 있어요.',
+  },
+  {
+    q: '등록한 사이트가 바로 노출되나요?',
+    a: '아니요, 등록 후에는 관리자 검토를 거쳐 승인된 사이트만 디렉토리에 노출됩니다. 스팸이나 잘못된 정보를 걸러내기 위한 절차입니다.',
+  },
+  {
+    q: '제가 운영하는 사이트가 아니어도 등록할 수 있나요?',
+    a: '네, 가능합니다. 소유자가 아니어도 등록할 수 있으며, 이 경우 소유권 인증 없이 "제 사이트가 아니에요" 옵션으로 제출을 완료할 수 있습니다. 다만 이런 제출은 관리자가 조금 더 꼼꼼히 검토합니다.',
+  },
+  {
+    q: '소유권 인증은 어떻게 하나요?',
+    a: '본인 사이트를 등록한 경우, 제출 후 안내되는 메타태그를 홈페이지에 추가하거나 DNS TXT 레코드를 등록해 소유권을 인증할 수 있습니다. 인증된 사이트는 프로필에 인증 배지가 표시됩니다.',
+  },
+  {
+    q: '리뷰는 어떻게 작성하나요?',
+    a: '각 사이트 상세 페이지 하단의 "리뷰 남기기"를 눌러 별점과 후기를 남길 수 있습니다. 작성된 리뷰는 검토 후 게시됩니다.',
+  },
+  {
+    q: '등록된 정보가 잘못됐어요. 수정을 요청하고 싶어요.',
+    a: '아직 별도의 수정 요청 폼은 없지만, 사이트 상세 페이지의 URL로 다시 접속해 확인해주시고, 정보가 오래됐거나 잘못된 경우 새로 등록해주시면 관리자가 확인 후 반영합니다.',
+  },
+  {
+    q: '카테고리가 잘못 분류된 것 같아요.',
+    a: '분류가 애매한 사이트들이 있을 수 있습니다. 지속적으로 검토하고 있으니 참고 부탁드립니다.',
+  },
+];
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map((item) => ({
+    '@type': 'Question',
+    name: item.q,
+    acceptedAnswer: { '@type': 'Answer', text: item.a },
+  })),
+};
+---
+
+<Layout title="자주 묻는 질문" description={`${SITE_NAME} 이용과 관련해 자주 묻는 질문을 모았습니다.`} canonicalPath="/faq" jsonLd={jsonLd}>
+  <nav class="text-sm text-slate-400 mb-4">
+    <a href="/" class="hover:text-slate-600">홈</a> <span class="mx-1">/</span> 자주 묻는 질문
+  </nav>
+
+  <h1 class="text-2xl font-bold text-slate-900">자주 묻는 질문</h1>
+  <p class="mt-2 text-slate-500">{SITE_NAME} 이용과 관련해 자주 묻는 질문을 모았습니다.</p>
+
+  <div class="mt-6 divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+    {faqs.map((item) => (
+      <details class="group p-5">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 font-medium text-slate-900">
+          {item.q}
+          <span class="shrink-0 text-slate-400 transition group-open:rotate-180">⌄</span>
+        </summary>
+        <p class="mt-3 text-sm leading-relaxed text-slate-600">{item.a}</p>
+      </details>
+    ))}
+  </div>
+</Layout>

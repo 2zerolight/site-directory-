@@ -1,0 +1,62 @@
+---
+import { env } from 'cloudflare:workers';
+import Layout from '../layouts/Layout.astro';
+import { getRecentApprovedSites, getPublicStats } from '../lib/db';
+import { SITE_NAME } from '../lib/site';
+
+const [recentSites, stats] = await Promise.all([
+  getRecentApprovedSites(env.DB, 60),
+  getPublicStats(env.DB),
+]);
+
+const formatDate = (value: string) =>
+  new Date(value.replace(' ', 'T') + 'Z').toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+
+type Group = { date: string; sites: typeof recentSites };
+const groups: Group[] = [];
+for (const site of recentSites) {
+  const date = formatDate(site.created_at);
+  const last = groups[groups.length - 1];
+  if (last && last.date === date) {
+    last.sites.push(site);
+  } else {
+    groups.push({ date, sites: [site] });
+  }
+}
+---
+
+<Layout title="업데이트" description={`${SITE_NAME}에 새로 등록된 사이트 소식을 확인하세요.`} canonicalPath="/updates">
+  <nav class="text-sm text-slate-400 mb-4">
+    <a href="/" class="hover:text-slate-600">홈</a> <span class="mx-1">/</span> 업데이트
+  </nav>
+
+  <h1 class="text-2xl font-bold text-slate-900">업데이트</h1>
+  <p class="mt-2 text-slate-500">
+    현재 {stats.totalCategories}개 카테고리에 총 {stats.totalSites}개 사이트가 등록되어 있습니다. 새로 등록된 사이트를 계속 업데이트합니다.
+  </p>
+
+  {groups.length === 0 ? (
+    <p class="mt-10 text-slate-400">아직 등록된 사이트가 없습니다.</p>
+  ) : (
+    <div class="mt-8 space-y-8">
+      {groups.map((group) => (
+        <section>
+          <h2 class="text-sm font-semibold text-slate-500">{group.date}</h2>
+          <ul class="mt-3 divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+            {group.sites.map((site) => (
+              <li class="flex items-center gap-3 p-4">
+                {site.logo_url && (
+                  <img src={site.logo_url} alt="" class="h-8 w-8 shrink-0 rounded-md border border-slate-100 object-cover" loading="lazy" />
+                )}
+                <div class="min-w-0 flex-1">
+                  <a href={`/site/${site.slug}`} class="font-medium text-slate-900 hover:underline">{site.name}</a>
+                  <span class="ml-2 text-xs text-slate-400">{site.category_name}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  )}
+</Layout>

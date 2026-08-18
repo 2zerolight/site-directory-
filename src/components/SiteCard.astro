@@ -19,7 +19,12 @@ const { site, showCategory = true } = Astro.props;
     )}
     <div class="min-w-0 flex-1">
       <div class="flex items-start justify-between gap-2">
-        <h3 class="font-semibold text-slate-900 truncate">{site.name}</h3>
+        <h3 class="min-w-0 truncate font-semibold text-slate-900">
+          {site.name}
+          {site.ownership_verified === 1 && (
+            <span class="ml-0.5 text-blue-500" title="소유권 인증된 사이트">✓</span>
+          )}
+        </h3>
         <div class="flex shrink-0 items-center gap-1.5">
           {showCategory && (
             <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">

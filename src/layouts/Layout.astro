@@ -142,6 +142,59 @@ const ogImageUrl = new URL(image || '/og-image.png', SITE_URL).toString();
 
       initShareButtons();
       document.addEventListener('astro:page-load', initShareButtons);
+
+      const HELPFUL_KEY = 'siteda_helpful_votes';
+
+      function getHelpfulVotes(): number[] {
+        try {
+          const raw = localStorage.getItem(HELPFUL_KEY);
+          return raw ? (JSON.parse(raw) as number[]) : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function initHelpfulButtons() {
+        const voted = getHelpfulVotes();
+        document.querySelectorAll<HTMLElement>('[data-helpful-button]').forEach((el) => {
+          const id = Number(el.dataset.siteId);
+          const countEl = el.querySelector('[data-helpful-count]');
+
+          if (voted.includes(id)) {
+            el.setAttribute('disabled', 'true');
+            el.classList.add('text-amber-600', 'border-amber-300');
+          }
+
+          if (el.dataset.helpfulBound) return;
+          el.dataset.helpfulBound = '1';
+          el.addEventListener('click', async () => {
+            if (voted.includes(id)) return;
+            el.setAttribute('disabled', 'true');
+            try {
+              const res = await fetch('/api/mark-helpful', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ siteId: id }),
+              });
+              const data = (await res.json()) as { ok: boolean; count?: number };
+              if (data.ok) {
+                const current = getHelpfulVotes();
+                current.push(id);
+                localStorage.setItem(HELPFUL_KEY, JSON.stringify(current));
+                if (countEl) countEl.textContent = data.count ? `(${data.count})` : '';
+                el.classList.add('text-amber-600', 'border-amber-300');
+              } else {
+                el.removeAttribute('disabled');
+              }
+            } catch {
+              el.removeAttribute('disabled');
+            }
+          });
+        });
+      }
+
+      initHelpfulButtons();
+      document.addEventListener('astro:page-load', initHelpfulButtons);
     </script>
   </body>
 </html>
