@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 21.727 20.177">
+  <defs>
+    <linearGradient id="linear-gradient" x1="0.5" x2="0.5" y2="1" gradientUnits="objectBoundingBox">
+      <stop offset="0" stop-color="#8849f5"/>
+      <stop offset="1" stop-color="#5e46fa"/>
+    </linearGradient>
+    <clipPath id="clip-path-2">
+      <rect width="21.727" height="20.177" fill="none"/>
+    </clipPath>
+    <linearGradient id="linear-gradient-2" x1="0.164" y1="0.076" x2="0.921" y2="0.932" xlink:href="#linear-gradient"/>
+  </defs>
+  <g clip-path="url(#clip-path-2)">
+    <path d="M16.765,14.848c-.049,0-.1,0-.146,0a2.6,2.6,0,0,0-.366.019h0a2.682,2.682,0,0,1-1.041-.034,3.41,3.41,0,0,1-2.685-2.916h0a8.4,8.4,0,0,1,.048-.936,4.681,4.681,0,1,0-9.319-.643A4.655,4.655,0,0,0,4.75,13.759a1.7,1.7,0,0,1,.335,1.247,1.656,1.656,0,0,1-1.323.839l.021.008a4.678,4.678,0,1,0,4.884,2.132c-.2-.335-.5-.809-.524-.871a1.556,1.556,0,0,1,.559-2.02,2.344,2.344,0,0,1,1.869.151q.086.039.17.083a3.9,3.9,0,0,1,1.873,3.453q-.005.107-.006.215a4.157,4.157,0,1,0,4.157-4.148" transform="translate(0 -4.935)" fill="url(#linear-gradient-2)"/>
+    <path d="M113.367,7.524A3.762,3.762,0,1,0,109.6,3.762a3.766,3.766,0,0,0,3.769,3.762" transform="translate(-95.41)" fill="url(#linear-gradient-2)"/>
+  </g>
+</svg>
