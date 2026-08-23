@@ -48,6 +48,15 @@ const ogImageUrl = new URL(image || '/og-image.png', SITE_URL).toString();
     {jsonLdBlocks.map((block) => (
       <script type="application/ld+json" set:html={JSON.stringify(block)} is:inline />
     ))}
+
+    <script async is:inline src="https://www.googletagmanager.com/gtag/js?id=G-2G6NNJJCFZ"></script>
+    <script is:inline>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-2G6NNJJCFZ');
+    </script>
   </head>
   <body class="min-h-screen flex flex-col bg-slate-50 text-slate-900">
     <Header />
