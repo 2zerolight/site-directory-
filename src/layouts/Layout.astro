@@ -204,6 +204,34 @@ const ogImageUrl = new URL(image || '/og-image.png', SITE_URL).toString();
 
       initHelpfulButtons();
       document.addEventListener('astro:page-load', initHelpfulButtons);
+
+      function updateFadeTruncation() {
+        document.querySelectorAll<HTMLElement>('.fade-truncate').forEach((el) => {
+          el.classList.toggle('is-truncated', el.scrollWidth > el.clientWidth + 1);
+        });
+        document.querySelectorAll<HTMLElement>('.fade-clamp-2').forEach((el) => {
+          el.classList.toggle('is-truncated', el.scrollHeight > el.clientHeight + 1);
+        });
+      }
+
+      updateFadeTruncation();
+      document.addEventListener('astro:page-load', updateFadeTruncation);
+
+      let fadeResizeHandle: number | undefined;
+      window.addEventListener('resize', () => {
+        if (fadeResizeHandle) cancelAnimationFrame(fadeResizeHandle);
+        fadeResizeHandle = requestAnimationFrame(updateFadeTruncation);
+      });
+
+      // Search suggestions and the bookmarks grid render cards via innerHTML
+      // after this script runs, so watch for DOM insertions rather than
+      // requiring every call site to re-trigger the check itself.
+      let fadeMutationHandle: number | undefined;
+      const fadeObserver = new MutationObserver(() => {
+        if (fadeMutationHandle) cancelAnimationFrame(fadeMutationHandle);
+        fadeMutationHandle = requestAnimationFrame(updateFadeTruncation);
+      });
+      fadeObserver.observe(document.body, { childList: true, subtree: true });
     </script>
   </body>
 </html>
