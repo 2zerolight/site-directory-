@@ -1,1 +1,18 @@
 @import "tailwindcss";
+
+@utility fade-truncate {
+  overflow: hidden;
+  white-space: nowrap;
+  mask-image: linear-gradient(to right, #000 calc(100% - 1.25rem), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.25rem), transparent 100%);
+}
+
+@utility fade-clamp-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 0.6rem), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 0.6rem), transparent 100%);
+}

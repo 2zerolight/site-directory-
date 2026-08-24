@@ -60,10 +60,10 @@ import Layout from '../layouts/Layout.astro';
               ${site.logo_url ? `<img src="${escapeHtml(site.logo_url)}" alt="" class="w-10 h-10 rounded-md object-cover object-left bg-white border border-slate-100 shrink-0" loading="lazy" />` : ''}
               <div class="min-w-0 flex-1">
                 <div class="flex items-start justify-between gap-2">
-                  <h3 class="font-semibold text-slate-900 truncate">${escapeHtml(site.name)}</h3>
+                  <h3 class="font-semibold text-slate-900 fade-truncate">${escapeHtml(site.name)}</h3>
                   <span class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">${escapeHtml(site.category_name)}</span>
                 </div>
-                <p class="mt-1 text-sm text-slate-500 line-clamp-2">${escapeHtml(site.tagline)}</p>
+                <p class="mt-1 text-sm text-slate-500 fade-clamp-2">${escapeHtml(site.tagline)}</p>
               </div>
             </div>
           </a>`

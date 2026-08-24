@@ -79,7 +79,7 @@ const q = Astro.url.searchParams.get('q') ?? '';
         <li>
           <a href="/site/${encodeURIComponent(s.slug)}" class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50">
             ${s.logo_url ? `<img src="${escapeHtml(s.logo_url)}" alt="" class="h-6 w-6 rounded object-cover shrink-0" />` : ''}
-            <span class="truncate text-slate-800">${escapeHtml(s.name)}</span>
+            <span class="fade-truncate text-slate-800">${escapeHtml(s.name)}</span>
             <span class="ml-auto shrink-0 text-xs text-slate-400">${escapeHtml(s.category_name)}</span>
           </a>
         </li>`
