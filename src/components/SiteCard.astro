@@ -1,12 +1,14 @@
 ---
 import type { SiteWithCategory } from '../types';
+import { decodeHostnameForDisplay } from '../lib/urls';
 
 interface Props {
   site: SiteWithCategory;
   showCategory?: boolean;
+  showVerifiedBadge?: boolean;
 }
 
-const { site, showCategory = true } = Astro.props;
+const { site, showCategory = true, showVerifiedBadge = true } = Astro.props;
 ---
 
 <a
@@ -21,7 +23,7 @@ const { site, showCategory = true } = Astro.props;
       <div class="flex items-start justify-between gap-2">
         <h3 class="flex min-w-0 items-baseline gap-1 font-semibold text-slate-900">
           <span class="truncate">{site.name}</span>
-          {site.ownership_verified === 1 && (
+          {showVerifiedBadge && site.ownership_verified === 1 && (
             <span class="shrink-0 text-blue-500" title="소유권 인증된 사이트">✓</span>
           )}
         </h3>
@@ -44,7 +46,7 @@ const { site, showCategory = true } = Astro.props;
       </div>
       <p class="mt-1 text-sm text-slate-500 line-clamp-2">{site.tagline || site.description}</p>
       <div class="mt-3 flex items-center gap-2 text-xs text-slate-400">
-        <span class="truncate">{new URL(site.url).hostname}</span>
+        <span class="truncate">{decodeHostnameForDisplay(new URL(site.url).hostname)}</span>
         {site.platform && <span class="shrink-0 rounded-full bg-slate-900 text-white px-2 py-0.5">{site.platform}</span>}
         {site.site_type && <span class="shrink-0 rounded-full border border-slate-200 px-2 py-0.5">{site.site_type}</span>}
         {site.region && <span class="shrink-0 rounded-full border border-slate-200 px-2 py-0.5">{site.region}</span>}

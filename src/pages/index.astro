@@ -44,7 +44,7 @@ const jsonLd = {
     <section class="mt-12">
       <h2 class="text-xl font-semibold text-slate-900 mb-4">인기 사이트</h2>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {popularSites.map((site) => <SiteCard site={site} />)}
+        {popularSites.map((site) => <SiteCard site={site} showVerifiedBadge={false} />)}
       </div>
     </section>
   )}
@@ -53,7 +53,7 @@ const jsonLd = {
     <section class="mt-12">
       <h2 class="text-xl font-semibold text-slate-900 mb-4">최근 등록된 사이트</h2>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {recentSites.map((site) => <SiteCard site={site} />)}
+        {recentSites.map((site) => <SiteCard site={site} showVerifiedBadge={false} />)}
       </div>
     </section>
   )}

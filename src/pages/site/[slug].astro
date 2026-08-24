@@ -12,6 +12,7 @@ import {
   insertReview,
 } from '../../lib/db';
 import { SITE_URL } from '../../lib/site';
+import { decodeHostnameForDisplay } from '../../lib/urls';
 import { ADMIN_COOKIE_NAME, isValidSessionCookieValue } from '../../lib/auth';
 
 const { slug } = Astro.params;
@@ -76,7 +77,7 @@ const [relatedSites, tags, reviews, reviewStats] = await Promise.all([
   getReviewStats(env.DB, site.id),
 ]);
 
-const hostname = new URL(site.url).hostname;
+const hostname = decodeHostnameForDisplay(new URL(site.url).hostname);
 
 const toChips = (raw: string | null) =>
   (raw ?? '')
