@@ -14,19 +14,20 @@ import {
 import { SITE_URL } from '../../lib/site';
 import { decodeHostnameForDisplay } from '../../lib/urls';
 import { ADMIN_COOKIE_NAME, isValidSessionCookieValue } from '../../lib/auth';
+import { renderNotFound } from '../../lib/not-found';
 
 const { slug } = Astro.params;
 const site = slug ? await getSiteBySlug(env.DB, slug) : null;
 
 if (!site) {
-  return Astro.redirect('/404');
+  return renderNotFound(Astro);
 }
 
 const isAdmin = await isValidSessionCookieValue(env.ADMIN_PASSWORD, Astro.cookies.get(ADMIN_COOKIE_NAME)?.value);
 const isApproved = site.status === 'approved';
 
 if (!isApproved && !isAdmin) {
-  return Astro.redirect('/404');
+  return renderNotFound(Astro);
 }
 
 let reviewSubmitted = false;

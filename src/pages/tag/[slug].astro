@@ -4,13 +4,14 @@ import Layout from '../../layouts/Layout.astro';
 import SiteCard from '../../components/SiteCard.astro';
 import { getApprovedSitesByTag, PAGE_SIZE } from '../../lib/db';
 import { SITE_URL } from '../../lib/site';
+import { renderNotFound } from '../../lib/not-found';
 
 const { slug } = Astro.params;
 const page = Math.max(1, Number(Astro.url.searchParams.get('page') ?? '1') || 1);
 const { sites, total, tag } = slug ? await getApprovedSitesByTag(env.DB, slug, page) : { sites: [], total: 0, tag: null };
 
 if (!tag) {
-  return Astro.redirect('/404');
+  return renderNotFound(Astro);
 }
 
 const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -30,7 +31,7 @@ const jsonLd = {
 };
 ---
 
-<Layout title={`#${tag.name}`} description={description} canonicalPath={`/tag/${tag.slug}`} jsonLd={jsonLd}>
+<Layout title={`#${tag.name}`} description={description} canonicalPath={page > 1 ? `/tag/${tag.slug}?page=${page}` : `/tag/${tag.slug}`} jsonLd={jsonLd}>
   <nav class="text-sm text-slate-400 mb-4">
     <a href="/" class="hover:text-slate-600">홈</a> <span class="mx-1">/</span> #{tag.name}
   </nav>

@@ -16,7 +16,9 @@ function urlEntry(path: string, lastmod: string | null): string {
 export const GET: APIRoute = async () => {
   const { sites, categories, tags } = await getSitemapData(env.DB);
 
-  const staticEntries = ['/', '/search', '/submit', '/faq', '/updates'].map((path) => urlEntry(path, null));
+  // /search 는 페이지 자체가 noindex 이므로 사이트맵에 넣지 않는다.
+  // (색인해달라고 제출해놓고 페이지에서 색인하지 말라고 하면 사이트맵 신뢰도가 깎인다)
+  const staticEntries = ['/', '/submit', '/faq', '/updates'].map((path) => urlEntry(path, null));
   const categoryEntries = categories.map((c) => urlEntry(`/category/${c.slug}`, toLastmod(c.last_update)));
   const tagEntries = tags.map((t) => urlEntry(`/tag/${t.slug}`, toLastmod(t.last_update)));
   const siteEntries = sites.map((s) => urlEntry(`/site/${s.slug}`, toLastmod(s.updated_at)));
