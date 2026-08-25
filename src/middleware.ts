@@ -28,6 +28,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
     CACHEABLE_EXACT.includes(path) || CACHEABLE_PREFIXES.some((p) => path.startsWith(p));
   if (!cacheable) return response;
 
-  response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=600');
-  return response;
+  // 렌더링 결과 Response의 헤더는 불변일 수 있어 .set()이 무시된다.
+  // 헤더를 복사해 새 Response로 만들어 반환한다.
+  const headers = new Headers(response.headers);
+  headers.set('Cache-Control', 'public, max-age=0, s-maxage=600');
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 });
