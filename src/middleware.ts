@@ -17,7 +17,9 @@ const CACHEABLE_EXACT = ['/', '/faq', '/updates', '/sitemap.xml', '/robots.txt']
 export const onRequest = defineMiddleware(async (context, next) => {
   const response = await next();
 
-  if (context.request.method !== 'GET') return response;
+  // HEAD는 본문 없는 GET이므로 동일하게 캐시 가능하다(크롤러가 HEAD를 쓰기도 한다).
+  const method = context.request.method;
+  if (method !== 'GET' && method !== 'HEAD') return response;
   // 로그인 상태에서는 관리자 전용 내용이 섞이므로 절대 캐시하지 않는다.
   if (context.cookies.get(ADMIN_COOKIE_NAME)?.value) return response;
   if (response.status !== 200) return response;
