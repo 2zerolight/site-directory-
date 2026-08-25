@@ -1,7 +1,6 @@
 import type { APIRoute } from 'astro';
 import { env } from 'cloudflare:workers';
 import { getSiteBySlug } from '../../lib/db';
-import { decodeHostnameForDisplay } from '../../lib/urls';
 import { badgeAltText, parseBadgeStyle, parseBadgeTheme, renderBadgeSvg } from '../../lib/badge';
 
 export const GET: APIRoute = async ({ params, url }) => {
@@ -16,7 +15,6 @@ export const GET: APIRoute = async ({ params, url }) => {
   const verified = site.ownership_verified === 1;
   const svg = renderBadgeSvg(
     {
-      hostname: decodeHostnameForDisplay(new URL(site.url).hostname),
       verified,
       style: parseBadgeStyle(url.searchParams.get('style')),
       theme: parseBadgeTheme(url.searchParams.get('theme')),

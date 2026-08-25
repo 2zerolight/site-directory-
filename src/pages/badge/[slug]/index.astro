@@ -63,7 +63,7 @@ function dimensions(svg: string): { width: string; height: string } {
 
 const variants = BADGE_STYLES.flatMap((style) =>
   BADGE_THEMES.map((theme) => {
-    const svg = renderBadgeSvg({ hostname, verified, style, theme }, altText);
+    const svg = renderBadgeSvg({ verified, style, theme }, altText);
     const { width, height } = dimensions(svg);
     const imgSnippet = `<a href="${linkUrl}" target="_blank" rel="noopener">
   <img src="${badgeImageUrl(site.slug, style, theme)}"
@@ -115,14 +115,14 @@ const verifiedDate = formatDate(site.verified_at);
         {site.verification_method === 'meta_tag' ? '메타태그' : 'DNS TXT'} 방식
         {verifiedDate && ` · ${verifiedDate} 확인`}
       </span>
-      <span class="w-full text-xs text-blue-600">배지에 “소유권 인증” 문구가 표시됩니다.</span>
+      <span class="w-full text-xs text-blue-600">배지에 “인증된 등록 사이트” 문구와 인증 마크가 표시됩니다.</span>
     </div>
   ) : (
     <div class="mt-6 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
       <p class="font-semibold">아직 소유권 인증 전입니다</p>
       <p class="mt-1 text-amber-700">
-        지금은 “등록 사이트” 배지만 사용할 수 있습니다. 메타태그나 DNS TXT로 도메인 소유를 확인하면
-        “소유권 인증” 배지로 자동 전환됩니다 — 이미 설치한 코드는 그대로 두셔도 됩니다.
+        지금은 “등록된 사이트” 배지만 사용할 수 있습니다. 메타태그나 DNS TXT로 도메인 소유를 확인하면
+        “인증된 등록 사이트” 배지로 자동 전환됩니다 — 이미 설치한 코드는 그대로 두셔도 됩니다.
       </p>
       <a
         href={`/submit/verify/${site.slug}`}

@@ -7,8 +7,6 @@ export type BadgeStyle = (typeof BADGE_STYLES)[number];
 export type BadgeTheme = (typeof BADGE_THEMES)[number];
 
 export interface BadgeInput {
-  /** Display hostname, already IDN-decoded. */
-  hostname: string;
   /** Only a real `ownership_verified` row may claim "인증". */
   verified: boolean;
   style: BadgeStyle;
@@ -56,6 +54,10 @@ const PALETTES: Record<BadgeTheme, Palette> = {
   },
 };
 
+function round(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 function escapeXml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -83,85 +85,108 @@ function textWidth(text: string, fontSize: number, weight: number): number {
   return units * fontSize * (weight >= 600 ? 1.03 : 1);
 }
 
-function statusLabel(verified: boolean): string {
-  return verified ? '사이트다 소유권 인증' : '사이트다 등록 사이트';
+function brandLine(): string {
+  return '사이트다';
+}
+
+function statusLine(verified: boolean): string {
+  return verified ? '인증된 등록 사이트' : '등록된 사이트';
 }
 
 /** Human-readable text used for the badge's alt/aria label. */
 export function badgeAltText(siteName: string, verified: boolean): string {
-  return verified ? `사이트다 소유권 인증 사이트 — ${siteName}` : `사이트다 등록 사이트 — ${siteName}`;
+  return `${siteName} · 사이트다 ${verified ? '인증된 등록 사이트' : '등록된 사이트'}`;
 }
 
-function checkMark(cx: number, cy: number, r: number, color: string): string {
-  const s = r * 0.52;
+/**
+ * Verified check tucked into the mark's bottom-right corner, ringed in the
+ * badge background so it reads as sitting on top of the mark.
+ */
+function verifiedCheck(cx: number, cy: number, r: number, accent: string, ring: string): string {
+  const s = r * 0.5;
   return (
-    `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}"/>` +
-    `<path d="M${cx - s} ${cy} l${s * 0.72} ${s * 0.72} L${cx + s} ${cy - s * 0.62}" ` +
-    `fill="none" stroke="#ffffff" stroke-width="${r * 0.28}" stroke-linecap="round" stroke-linejoin="round"/>`
+    `<circle cx="${cx}" cy="${cy}" r="${r + 1.6}" fill="${ring}"/>` +
+    `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${accent}"/>` +
+    `<path d="M${cx - s} ${cy + s * 0.05} l${s * 0.7} ${s * 0.72} L${cx + s} ${cy - s * 0.66}" ` +
+    `fill="none" stroke="#ffffff" stroke-width="${r * 0.3}" stroke-linecap="round" stroke-linejoin="round"/>`
+  );
+}
+
+function mark(x: number, y: number, size: number, glyphSize: number, p: Palette): string {
+  return (
+    `<rect x="${x}" y="${y}" width="${size}" height="${size}" rx="${round(size * 0.28)}" fill="${p.markBg}"/>` +
+    `<text x="${x + size / 2}" y="${y + size * 0.72}" font-family="${FONT_STACK}" font-size="${glyphSize}" ` +
+    `font-weight="800" fill="${p.markFg}" text-anchor="middle">사</text>`
   );
 }
 
 function renderStandard(input: BadgeInput, p: Palette, title: string): string {
-  const label = statusLabel(input.verified);
-  const h = 56;
-  const markSize = 34;
-  const padX = 11;
-  const gap = 10;
-  const labelSize = 10.5;
-  const hostSize = 13;
-  const checkSlot = input.verified ? 26 : 0;
+  const brand = brandLine();
+  const status = statusLine(input.verified);
+  const h = 52;
+  const padX = 12;
+  const markSize = 32;
+  const markX = padX;
+  const markY = 10;
+  const dividerX = markX + markSize + 12;
+  const textX = dividerX + 12;
+  const brandSize = 13.5;
+  const statusSize = 10.5;
 
-  const textW = Math.max(textWidth(label, labelSize, 500), textWidth(input.hostname, hostSize, 600));
-  const w = Math.round(padX + markSize + gap + textW + checkSlot + padX);
-  const textX = padX + markSize + gap;
+  const textW = Math.max(textWidth(brand, brandSize, 700), textWidth(status, statusSize, 500));
+  const w = Math.round(textX + textW + padX);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeXml(title)}">
   <title>${escapeXml(title)}</title>
-  <rect x="0.5" y="0.5" width="${w - 1}" height="${h - 1}" rx="9" fill="${p.bg}" stroke="${p.border}"/>
-  <rect x="${padX}" y="${(h - markSize) / 2}" width="${markSize}" height="${markSize}" rx="9" fill="${p.markBg}"/>
-  <text x="${padX + markSize / 2}" y="${h / 2 + 7.5}" font-family="${FONT_STACK}" font-size="21" font-weight="800" fill="${p.markFg}" text-anchor="middle">사</text>
-  <text x="${textX}" y="24" font-family="${FONT_STACK}" font-size="${labelSize}" font-weight="500" fill="${p.label}" letter-spacing="0.2">${escapeXml(label)}</text>
-  <text x="${textX}" y="40" font-family="${FONT_STACK}" font-size="${hostSize}" font-weight="600" fill="${p.value}">${escapeXml(input.hostname)}</text>
-  ${input.verified ? checkMark(w - padX - 8, h / 2, 8, p.accent) : ''}
+  <rect x="0.5" y="0.5" width="${w - 1}" height="${h - 1}" rx="8" fill="${p.bg}" stroke="${p.border}"/>
+  ${mark(markX, markY, markSize, 19.5, p)}
+  ${input.verified ? verifiedCheck(markX + markSize - 4, markY + markSize - 4, 6.5, p.accent, p.bg) : ''}
+  <line x1="${dividerX}" y1="12" x2="${dividerX}" y2="40" stroke="${p.border}"/>
+  <text x="${textX}" y="25" font-family="${FONT_STACK}" font-size="${brandSize}" font-weight="700" fill="${p.value}" letter-spacing="-0.1">${escapeXml(brand)}</text>
+  <text x="${textX}" y="40" font-family="${FONT_STACK}" font-size="${statusSize}" font-weight="500" fill="${p.label}">${escapeXml(status)}</text>
 </svg>`;
 }
 
 function renderCompact(input: BadgeInput, p: Palette, title: string): string {
-  const label = input.verified ? '사이트다 인증' : '사이트다 등록';
-  const h = 34;
+  // A 32px badge has no room for both a mark and a check glyph, so the status
+  // word itself carries the colour: accent when verified, muted when not.
+  const word = input.verified ? '인증' : '등록';
+  const full = `사이트다 ${word}`;
+  const h = 32;
+  const padX = 10;
   const markSize = 20;
-  const padX = 9;
-  const gap = 7;
-  const fontSize = 11.5;
-  const checkSlot = input.verified ? 20 : 0;
+  const markX = padX;
+  const markY = 6;
+  const textX = markX + markSize + 9;
+  const fontSize = 11;
 
-  const w = Math.round(padX + markSize + gap + textWidth(label, fontSize, 600) + checkSlot + padX);
-  const textX = padX + markSize + gap;
+  const w = Math.round(textX + textWidth(full, fontSize, 600) + padX);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeXml(title)}">
   <title>${escapeXml(title)}</title>
-  <rect x="0.5" y="0.5" width="${w - 1}" height="${h - 1}" rx="7" fill="${p.bg}" stroke="${p.border}"/>
-  <rect x="${padX}" y="${(h - markSize) / 2}" width="${markSize}" height="${markSize}" rx="5.5" fill="${p.markBg}"/>
-  <text x="${padX + markSize / 2}" y="${h / 2 + 4.5}" font-family="${FONT_STACK}" font-size="12.5" font-weight="800" fill="${p.markFg}" text-anchor="middle">사</text>
-  <text x="${textX}" y="${h / 2 + 4}" font-family="${FONT_STACK}" font-size="${fontSize}" font-weight="600" fill="${p.value}">${escapeXml(label)}</text>
-  ${input.verified ? checkMark(w - padX - 6.5, h / 2, 6.5, p.accent) : ''}
+  <rect x="0.5" y="0.5" width="${w - 1}" height="${h - 1}" rx="6" fill="${p.bg}" stroke="${p.border}"/>
+  ${mark(markX, markY, markSize, 12, p)}
+  <text x="${textX}" y="21" font-family="${FONT_STACK}" font-size="${fontSize}" font-weight="600" letter-spacing="-0.1"><tspan fill="${p.value}">사이트다 </tspan><tspan fill="${input.verified ? p.accent : p.label}" font-weight="700">${word}</tspan></text>
 </svg>`;
 }
 
 function renderSeal(input: BadgeInput, p: Palette, title: string): string {
-  const size = 108;
-  const label = input.verified ? '소유권 인증' : '등록 사이트';
+  const size = 104;
+  const c = size / 2;
+  const status = input.verified ? '인증 완료' : '등록 완료';
+  const markSize = 26;
+  const markX = c - markSize / 2;
+  const markY = 17;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${escapeXml(title)}">
   <title>${escapeXml(title)}</title>
-  <rect x="0.5" y="0.5" width="${size - 1}" height="${size - 1}" rx="14" fill="${p.bg}" stroke="${p.border}"/>
-  <rect x="5.5" y="5.5" width="${size - 11}" height="${size - 11}" rx="10" fill="none" stroke="${p.border}" stroke-dasharray="3 3"/>
-  <rect x="${size / 2 - 15}" y="16" width="30" height="30" rx="8" fill="${p.markBg}"/>
-  <text x="${size / 2}" y="38" font-family="${FONT_STACK}" font-size="19" font-weight="800" fill="${p.markFg}" text-anchor="middle">사</text>
-  <text x="${size / 2}" y="64" font-family="${FONT_STACK}" font-size="12.5" font-weight="700" fill="${p.value}" text-anchor="middle">${escapeXml(label)}</text>
-  <text x="${size / 2}" y="79" font-family="${FONT_STACK}" font-size="10" font-weight="500" fill="${p.label}" text-anchor="middle">사이트다</text>
-  <line x1="30" y1="86" x2="${size - 30}" y2="86" stroke="${p.border}"/>
-  <text x="${size / 2}" y="98" font-family="${FONT_STACK}" font-size="8.5" font-weight="500" fill="${p.label}" text-anchor="middle" letter-spacing="0.4">siteda.kr</text>
+  <circle cx="${c}" cy="${c}" r="${c - 1}" fill="${p.bg}" stroke="${p.border}"/>
+  <circle cx="${c}" cy="${c}" r="${c - 6}" fill="none" stroke="${p.border}" stroke-opacity="0.65"/>
+  ${mark(markX, markY, markSize, 16, p)}
+  ${input.verified ? verifiedCheck(markX + markSize - 3, markY + markSize - 3, 5.6, p.accent, p.bg) : ''}
+  <text x="${c}" y="62" font-family="${FONT_STACK}" font-size="12.5" font-weight="700" fill="${p.value}" text-anchor="middle" letter-spacing="-0.2">사이트다</text>
+  <line x1="${c - 15}" y1="70" x2="${c + 15}" y2="70" stroke="${p.border}"/>
+  <text x="${c}" y="84" font-family="${FONT_STACK}" font-size="9.5" font-weight="500" fill="${p.label}" text-anchor="middle">${escapeXml(status)}</text>
 </svg>`;
 }
 
