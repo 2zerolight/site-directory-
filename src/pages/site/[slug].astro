@@ -325,6 +325,15 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
     </div>
 
     {isApproved && (
+      <a
+        href={`/badge/${site.slug}`}
+        class="mt-4 inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs text-slate-500 hover:border-slate-400 hover:text-slate-900"
+      >
+        이 사이트 운영자세요? {site.ownership_verified ? '인증' : '등록'} 배지 받기 →
+      </a>
+    )}
+
+    {isApproved && (
       <div class="mt-6 border-t border-slate-100 pt-6">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-sm font-semibold text-slate-900">
