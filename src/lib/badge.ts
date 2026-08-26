@@ -57,8 +57,22 @@ const CHECK_PATH = 'M23.53 28.07l3.13 3.22L32.47 24.58';
  */
 const CORNER_OFFSET = 0.664;
 
-const EMBLEM_W = 56;
-const EMBLEM_H = 52;
+/**
+ * 잎 경로가 놓인 56x52 박스 안에서 실제 잉크가 차지하는 영역(getBBox 실측).
+ * 박스 기준으로 배치하면 왼쪽에 12, 아래로 3만큼 빈 공간이 딸려와 여백이 어긋난다.
+ * 그래서 모든 배치는 이 잉크 박스를 기준으로 한다.
+ */
+const INK_X = 12.02;
+const INK_Y = 15.38;
+const INK_W = 32.51;
+const INK_H = 27.46;
+
+/**
+ * 워드마크는 `textLength`로 폭을 고정한다. 배지는 방문자 기기의 폰트로 렌더링되는
+ * 독립 SVG라, 폭을 계산에 맡기면 기기마다 여백이 달라진다. 아래 값은 macOS에서
+ * 잰 자연폭(9pt/자간1.3 = 62.5)에 가깝게 잡아 자간만 미세 조정되도록 한 것이다.
+ */
+const WORDMARK_LENGTH: Record<number, number> = { 9: 61, 8: 54 };
 
 interface Palette {
   bg: string;
@@ -84,12 +98,6 @@ function escapeXml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
-}
-
-function wordmarkWidth(fontSize: number, letterSpacing: number): number {
-  let units = 0;
-  for (const ch of WORDMARK) units += /[I.]/.test(ch) ? 0.34 : 0.66;
-  return units * fontSize + letterSpacing * (WORDMARK.length - 1);
 }
 
 /** 배지에는 한글이 없으므로 의미는 alt 텍스트가 담는다. */
@@ -132,7 +140,7 @@ function animationCss(): string {
  * 선으로만 그리고 체크를 뺀다 — 이미 남의 사이트에 붙어 있는 배지가 깨진 이미지가
  * 되지 않으면서, 인증 상태를 사실대로 낮춰 보여주기 위해서다.
  */
-function emblem(input: BadgeInput, p: Palette, x: number, y: number, scale: number): string {
+function emblem(input: BadgeInput, p: Palette, inkX: number, inkY: number, scale: number): string {
   const paint = input.verified
     ? `fill="${p.ink}"`
     : `fill="none" stroke="${p.ink}" stroke-width="${round(0.9 / scale)}" stroke-opacity="0.55" stroke-linejoin="round"`;
@@ -142,16 +150,20 @@ function emblem(input: BadgeInput, p: Palette, x: number, y: number, scale: numb
       `stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`
     : '';
 
+  // 잉크의 좌상단이 (inkX, inkY)에 오도록 박스 여백만큼 되민다.
+  const tx = inkX - INK_X * scale;
+  const ty = inkY - INK_Y * scale;
   return (
-    `<g transform="translate(${round(x)} ${round(y)}) scale(${round(scale)})">` +
+    `<g transform="translate(${round(tx)} ${round(ty)}) scale(${round(scale)})">` +
     `<g ${paint}>${leaves}</g>${check}</g>`
   );
 }
 
-function wordmark(x: number, y: number, fontSize: number, letterSpacing: number, fill: string): string {
+function wordmark(x: number, y: number, fontSize: number, fill: string): string {
   return (
     `<text x="${round(x)}" y="${round(y)}" font-family="${FONT_STACK}" font-size="${fontSize}" ` +
-    `font-weight="700" fill="${fill}" letter-spacing="${letterSpacing}">${WORDMARK}</text>`
+    `font-weight="700" fill="${fill}" textLength="${WORDMARK_LENGTH[fontSize]}" ` +
+    `lengthAdjust="spacing">${WORDMARK}</text>`
   );
 }
 
@@ -163,48 +175,53 @@ function svgOpen(w: number, h: number, title: string, input: BadgeInput): string
   );
 }
 
-/** 가로 락업: 엠블럼, 헤어라인, 워드마크. */
+/** 가로 락업: 엠블럼, 헤어라인, 워드마크. 좌우 여백을 잉크 기준으로 맞춘다. */
 function renderStandard(input: BadgeInput, p: Palette, title: string): string {
-  const h = 36;
-  const padX = 10;
-  const scale = 30 / EMBLEM_H;
-  const emblemW = EMBLEM_W * scale;
-  const dividerX = padX + emblemW + 9;
-  const wordX = dividerX + 10;
+  const h = 34;
+  const pad = 11;
+  const gap = 10;
+  const inkH = 20;
+  const scale = inkH / INK_H;
+  const inkW = INK_W * scale;
   const fontSize = 9;
-  const letterSpacing = 1.3;
-  const w = Math.round(wordX + wordmarkWidth(fontSize, letterSpacing) + padX);
+  // 폭을 정수로 맞춘 뒤 워드마크를 오른쪽 여백 기준으로 되잡는다. 그래야 반올림
+  // 오차가 좌우 여백이 아니라 가운데 간격으로 흡수된다.
+  const w = Math.round(pad + inkW + gap * 2 + WORDMARK_LENGTH[fontSize] + pad);
+  const wordX = round(w - pad - WORDMARK_LENGTH[fontSize]);
+  const dividerX = round(wordX - gap);
 
   return `${svgOpen(w, h, title, input)}
   <rect x="0.5" y="0.5" width="${w - 1}" height="${h - 1}" rx="6" fill="${p.bg}" stroke="${p.border}"/>
-  ${emblem(input, p, padX, (h - EMBLEM_H * scale) / 2, scale)}
-  <line x1="${dividerX}" y1="10" x2="${dividerX}" y2="26" stroke="${p.hairline}"/>
-  ${wordmark(wordX, 21.5, fontSize, letterSpacing, p.word)}
+  ${emblem(input, p, pad, (h - inkH) / 2, scale)}
+  <line x1="${dividerX}" y1="9" x2="${dividerX}" y2="25" stroke="${p.hairline}"/>
+  ${wordmark(wordX, 20.4, fontSize, p.word)}
 </svg>`;
 }
 
-/** 엠블럼 단독 — 아이콘 자리밖에 없는 푸터용. */
+/** 엠블럼 단독 — 아이콘 자리밖에 없는 푸터용. 잉크에 딱 맞춰 자른다. */
 function renderCompact(input: BadgeInput, p: Palette, title: string): string {
-  const h = 32;
-  const scale = h / EMBLEM_H;
-  const w = Math.round(EMBLEM_W * scale);
+  const inkH = 30;
+  const scale = inkH / INK_H;
+  const w = Math.round(INK_W * scale);
+  const h = Math.round(inkH);
   return `${svgOpen(w, h, title, input)}
-  ${emblem(input, p, 0, 0, scale)}
+  ${emblem(input, p, (w - INK_W * scale) / 2, 0, scale)}
 </svg>`;
 }
 
 /** 씰 — 엠블럼을 키우고 아래에 워드마크. */
 function renderSeal(input: BadgeInput, p: Palette, title: string): string {
   const size = 96;
-  const scale = 62 / EMBLEM_H;
-  const emblemW = EMBLEM_W * scale;
+  const inkH = 54;
+  const scale = inkH / INK_H;
+  const inkW = INK_W * scale;
   const fontSize = 8;
-  const letterSpacing = 1.2;
+  const inkTop = 11;
 
   return `${svgOpen(size, size, title, input)}
-  ${emblem(input, p, (size - emblemW) / 2, 6, scale)}
-  <line x1="${size / 2 - 16}" y1="76" x2="${size / 2 + 16}" y2="76" stroke="${p.hairline}"/>
-  ${wordmark(size / 2 - wordmarkWidth(fontSize, letterSpacing) / 2, 89, fontSize, letterSpacing, p.word)}
+  ${emblem(input, p, (size - inkW) / 2, inkTop, scale)}
+  <line x1="${size / 2 - 16}" y1="${inkTop + inkH + 9}" x2="${size / 2 + 16}" y2="${inkTop + inkH + 9}" stroke="${p.hairline}"/>
+  ${wordmark((size - WORDMARK_LENGTH[fontSize]) / 2, inkTop + inkH + 21, fontSize, p.word)}
 </svg>`;
 }
 
