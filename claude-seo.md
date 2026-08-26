@@ -18,7 +18,7 @@ Search Console의 **"적절한 표준 태그가 포함된 대체 페이지"** �
 | 3 | 브랜드명 충돌 — **siteda.co.kr이 이미 "사이트다"로 운영 중** | 전략 문제 |
 | 4 | 상세 페이지 콘텐츠가 원본보다 나을 이유가 없음 (thin/aggregator) | 콘텐츠 문제 |
 | 5 | 페이지네이션 canonical 버그 → 173개 페이지 고아화 | **코드 버그** |
-| 6 | 태그 시스템이 프로덕션에서 완전히 비어 있음 (내부 링크 밀도 0) | **데이터 누락** |
+| 6 | ~~태그 시스템이 프로덕션에서 완전히 비어 있음~~ → **2026-08-26 해결됨** (태그 151개 / 연결 687건 투입) | 해결 |
 | 7 | 404를 302 리디렉션으로 처리 / sitemap에 noindex 페이지 포함 | 위생 문제 |
 
 **8일 된 사이트가 노출 0인 것은 그 자체로는 이상하지 않습니다.** 지금 할 일은 "왜 안 나오지"가 아니라 "나올 준비가 되어 있나"를 만드는 것입니다.
@@ -94,9 +94,9 @@ canonical 태그                          URL과 정확히 일치 ✅ (한글 �
 | `/site/*` | 597 | |
 | `/category/*` | 21 | |
 | 정적 (`/`, `/faq`, `/submit`, `/updates`, `/search`) | 5 | `/search`는 noindex인데 포함됨 ⚠️ |
-| **`/tag/*`** | **0** | **아래 참조** 🔴 |
+| **`/tag/*`** | **0** | **아래 참조** — 08-26 재측정 시 151개로 해결됨 ✅ |
 
-### 태그 시스템이 프로덕션에서 비어 있음 🔴
+### 태그 시스템이 프로덕션에서 비어 있음 🔴 → ✅ 2026-08-26 해결됨
 
 `getSitemapData()`(`src/lib/db.ts:238`)는 태그를 조회하는데 결과가 0건이고,
 **홈페이지 HTML에도 `/tag/` 링크가 단 하나도 없습니다.**
@@ -107,6 +107,11 @@ canonical 태그                          URL과 정확히 일치 ✅ (한글 �
 `홈 → 카테고리 → 상세` 3단계인데, 태그가 있어야 **상세 ↔ 상세 수평 연결**이 생깁니다.
 지금은 그 층이 통째로 없어서 597개 상세 페이지가 서로 완전히 고립돼 있습니다
 (`관련 사이트` 블록만 유일한 수평 링크).
+
+> **2026-08-26 재측정 — 해결됨.** 프로덕션 sitemap이 623개 → **773개**로 늘었고
+> `/tag/` URL이 0개 → **151개**가 되었습니다. `site_tags` 연결도 687건이 들어가
+> 상세↔상세 수평 링크 층이 복구됐습니다. 아래 실행 계획 #6은 완료 처리하세요.
+> (참고: 이 문서의 최초 측정은 08-25 22시경이었고, 그 직후 데이터가 투입됐습니다.)
 
 ### robots.txt에 `User-agent: *` 그룹이 2개 ⚠️
 
@@ -212,7 +217,7 @@ canonicalPath={page > 1 ? `${pageUrl({ page, sub: activeSubcategory?.slug, platf
 
 | # | 작업 | 왜 |
 |---|---|---|
-| 6 | **태그 데이터 채우기** — 597개 사이트에 태그 부여 | 상세↔상세 수평 링크 복구. 173개 고아 페이지 문제도 같이 완화됨 |
+| ~~6~~ | ~~**태그 데이터 채우기**~~ — **완료 (08-26 확인: 태그 151개 / 연결 687건)** | 상세↔상세 수평 링크 복구. 173개 고아 페이지 문제도 같이 완화됨 |
 | 7 | 카테고리 21개에 **200~400자 고유 해설** 작성 | 현재 `description` 한 줄로는 카테고리 페이지도 thin |
 | 8 | Cloudflare 관리형 robots.txt 정리 (그룹 1개로) | 네이버 Yeti가 sitemap 지시를 읽게 |
 | 9 | **네이버 서치어드바이저 / 빙 웹마스터 등록** | 한국 시장에서 초기 노출은 네이버가 훨씬 빠름 |
@@ -243,8 +248,8 @@ canonicalPath={page > 1 ? `${pageUrl({ page, sub: activeSubcategory?.slug, platf
 ```bash
 curl -sSI https://siteda.kr/                      # 200, Cache-Control 없음
 curl -sS  https://siteda.kr/robots.txt            # User-agent: * 그룹 2개
-curl -sS  https://siteda.kr/sitemap.xml | grep -c "<url>"   # 623
-curl -sS  https://siteda.kr/sitemap.xml | grep -c "/tag/"   # 0
+curl -sS  https://siteda.kr/sitemap.xml | grep -c "<url>"   # 08-25: 623 → 08-26: 773
+curl -sS  https://siteda.kr/sitemap.xml | grep -c "/tag/"   # 08-25:   0 → 08-26: 151
 curl -sS -o /dev/null -w "%{http_code} %{redirect_url}\n" \
      https://siteda.kr/site/does-not-exist-xyz    # 302 → /404
 ```
