@@ -22,7 +22,24 @@ export function parseBadgeTheme(raw: string | null): BadgeTheme {
 }
 
 const FONT_STACK = "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif";
-const WORDMARK = 'SITEDA.KR';
+const LABEL_LINE = 'VERIFIED';
+const NAME_LINE = 'SITEDA.KR';
+
+/**
+ * 두 줄의 폭을 같게 고정해 텍스트 블록이 직사각형이 되게 한다.
+ * `textLength` + `lengthAdjust="spacing"` 이라 자간만 조정되고 글자 모양은 안 눌린다.
+ */
+const WORD_W = 64;
+const LABEL_SIZE = 6;
+const NAME_SIZE = 9.5;
+
+/**
+ * 실측 잉크 높이(canvas measureText의 actualBoundingBoxAscent).
+ * 캡 높이를 폰트크기 x 0.72 로 어림잡으면 블록이 위로 1.2 뜬다.
+ */
+const LABEL_INK_H = 4.228;
+const NAME_INK_H = 6.865;
+const LINE_GAP = 2.6;
 
 /**
  * 월계관 잎 14장(좌우 7쌍). 반지름 15.5의 호 위에 잎의 *중심*을 얹어 서로 겹치게
@@ -68,11 +85,9 @@ const INK_W = 32.51;
 const INK_H = 27.46;
 
 /**
- * 워드마크는 `textLength`로 폭을 고정한다. 배지는 방문자 기기의 폰트로 렌더링되는
- * 독립 SVG라, 폭을 계산에 맡기면 기기마다 여백이 달라진다. 아래 값은 macOS에서
- * 잰 자연폭(9pt/자간1.3 = 62.5)에 가깝게 잡아 자간만 미세 조정되도록 한 것이다.
+ * 배지는 방문자 기기의 폰트로 렌더링되는 독립 SVG라, 폭을 계산에 맡기면 기기마다
+ * 여백이 달라진다. 그래서 폭을 값으로 고정한다.
  */
-const WORDMARK_LENGTH: Record<number, number> = { 9: 61, 8: 54 };
 
 interface Palette {
   bg: string;
@@ -159,11 +174,25 @@ function emblem(input: BadgeInput, p: Palette, inkX: number, inkY: number, scale
   );
 }
 
-function wordmark(x: number, y: number, fontSize: number, fill: string): string {
+function line(x: number, y: number, size: number, text: string, fill: string, opacity = 1): string {
   return (
-    `<text x="${round(x)}" y="${round(y)}" font-family="${FONT_STACK}" font-size="${fontSize}" ` +
-    `font-weight="700" fill="${fill}" textLength="${WORDMARK_LENGTH[fontSize]}" ` +
-    `lengthAdjust="spacing">${WORDMARK}</text>`
+    `<text x="${round(x)}" y="${round(y)}" font-family="${FONT_STACK}" font-size="${size}" ` +
+    `font-weight="700" fill="${fill}" fill-opacity="${opacity}" textLength="${WORD_W}" ` +
+    `lengthAdjust="spacing">${text}</text>`
+  );
+}
+
+/**
+ * VERIFIED / SITEDA.KR 두 줄. 두 줄의 *잉크* 블록 중심이 centerY 에 오도록
+ * 베이스라인을 역산한다 — 폰트의 em 박스가 아니라 잉크 기준이어야 눈에 맞는다.
+ */
+function wordmarkBlock(x: number, centerY: number, p: Palette): string {
+  const total = LABEL_INK_H + LINE_GAP + NAME_INK_H;
+  const labelBaseline = centerY - total / 2 + LABEL_INK_H;
+  const nameBaseline = labelBaseline + LINE_GAP + NAME_INK_H;
+  return (
+    line(x, labelBaseline, LABEL_SIZE, LABEL_LINE, p.word, 0.55) +
+    line(x, nameBaseline, NAME_SIZE, NAME_LINE, p.word)
   );
 }
 
@@ -175,26 +204,25 @@ function svgOpen(w: number, h: number, title: string, input: BadgeInput): string
   );
 }
 
-/** 가로 락업: 엠블럼, 헤어라인, 워드마크. 좌우 여백을 잉크 기준으로 맞춘다. */
+/** 가로 락업: 엠블럼, 헤어라인, 두 줄 워드마크. 좌우 여백은 잉크 기준으로 맞춘다. */
 function renderStandard(input: BadgeInput, p: Palette, title: string): string {
-  const h = 34;
+  const h = 38;
   const pad = 11;
   const gap = 10;
   const inkH = 20;
   const scale = inkH / INK_H;
   const inkW = INK_W * scale;
-  const fontSize = 9;
   // 폭을 정수로 맞춘 뒤 워드마크를 오른쪽 여백 기준으로 되잡는다. 그래야 반올림
   // 오차가 좌우 여백이 아니라 가운데 간격으로 흡수된다.
-  const w = Math.round(pad + inkW + gap * 2 + WORDMARK_LENGTH[fontSize] + pad);
-  const wordX = round(w - pad - WORDMARK_LENGTH[fontSize]);
+  const w = Math.round(pad + inkW + gap * 2 + WORD_W + pad);
+  const wordX = w - pad - WORD_W;
   const dividerX = round(wordX - gap);
 
   return `${svgOpen(w, h, title, input)}
   <rect x="0.5" y="0.5" width="${w - 1}" height="${h - 1}" rx="6" fill="${p.bg}" stroke="${p.border}"/>
   ${emblem(input, p, pad, (h - inkH) / 2, scale)}
-  <line x1="${dividerX}" y1="9" x2="${dividerX}" y2="25" stroke="${p.hairline}"/>
-  ${wordmark(wordX, 20.4, fontSize, p.word)}
+  <line x1="${dividerX}" y1="${h / 2 - 8}" x2="${dividerX}" y2="${h / 2 + 8}" stroke="${p.hairline}"/>
+  ${wordmarkBlock(wordX, h / 2, p)}
 </svg>`;
 }
 
@@ -209,19 +237,19 @@ function renderCompact(input: BadgeInput, p: Palette, title: string): string {
 </svg>`;
 }
 
-/** 씰 — 엠블럼을 키우고 아래에 워드마크. */
+/** 씰 — 엠블럼을 키우고 아래에 두 줄 워드마크를 쌓는다. */
 function renderSeal(input: BadgeInput, p: Palette, title: string): string {
   const size = 96;
-  const inkH = 54;
+  const inkH = 48;
   const scale = inkH / INK_H;
   const inkW = INK_W * scale;
-  const fontSize = 8;
-  const inkTop = 11;
+  const inkTop = 10;
+  const dividerY = inkTop + inkH + 8;
 
   return `${svgOpen(size, size, title, input)}
   ${emblem(input, p, (size - inkW) / 2, inkTop, scale)}
-  <line x1="${size / 2 - 16}" y1="${inkTop + inkH + 9}" x2="${size / 2 + 16}" y2="${inkTop + inkH + 9}" stroke="${p.hairline}"/>
-  ${wordmark((size - WORDMARK_LENGTH[fontSize]) / 2, inkTop + inkH + 21, fontSize, p.word)}
+  <line x1="${size / 2 - 16}" y1="${dividerY}" x2="${size / 2 + 16}" y2="${dividerY}" stroke="${p.hairline}"/>
+  ${wordmarkBlock((size - WORD_W) / 2, dividerY + 12, p)}
 </svg>`;
 }
 
