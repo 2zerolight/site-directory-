@@ -25,7 +25,7 @@ if (!site || site.status !== 'approved') {
 const verified = site.ownership_verified === 1;
 const hostname = decodeHostnameForDisplay(new URL(site.url).hostname);
 const linkUrl = badgeLinkUrl(site.slug);
-const altText = badgeAltText(site.name, verified);
+const altText = badgeAltText(site.name);
 
 type CheckResult = 'found' | 'missing' | 'error';
 let checkResult: CheckResult | null = null;
@@ -63,7 +63,7 @@ function dimensions(svg: string): { width: string; height: string } {
 
 const variants = BADGE_STYLES.flatMap((style) =>
   BADGE_THEMES.map((theme) => {
-    const svg = renderBadgeSvg({ verified, style, theme }, altText);
+    const svg = renderBadgeSvg({ style, theme }, altText);
     const { width, height } = dimensions(svg);
     const imgSnippet = `<a href="${linkUrl}" target="_blank" rel="noopener">
   <img src="${badgeImageUrl(site.slug, style, theme)}"

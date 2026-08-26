@@ -7,8 +7,6 @@ export type BadgeStyle = (typeof BADGE_STYLES)[number];
 export type BadgeTheme = (typeof BADGE_THEMES)[number];
 
 export interface BadgeInput {
-  /** 소유권 인증된 사이트만 체크와 애니메이션을 받는다. */
-  verified: boolean;
   style: BadgeStyle;
   theme: BadgeTheme;
 }
@@ -116,8 +114,8 @@ function escapeXml(value: string): string {
 }
 
 /** 배지에는 한글이 없으므로 의미는 alt 텍스트가 담는다. */
-export function badgeAltText(siteName: string, verified: boolean): string {
-  return `${siteName} · 사이트다 ${verified ? '인증된 등록 사이트' : '등록된 사이트'}`;
+export function badgeAltText(siteName: string): string {
+  return `${siteName} · 사이트다 인증된 등록 사이트`;
 }
 
 /**
@@ -137,7 +135,10 @@ function animationCss(): string {
   const P = '%';
 
   return (
-    `.ck{stroke-dasharray:1;stroke-dashoffset:1;animation:sdck ${cycle}s infinite}` +
+    // 기본값은 '그려진 상태'여야 한다. 애니메이션이 안 도는 환경(이메일 클라이언트,
+    // 일부 CMS 미리보기, SVG 새니타이저를 거친 경우)에서 dashoffset:1 로 두면
+    // 체크가 영영 나타나지 않는다.
+    `.ck{stroke-dasharray:1;stroke-dashoffset:0;animation:sdck ${cycle}s infinite}` +
     `@keyframes sdck{` +
     `0${P}{stroke-dashoffset:1;opacity:1;animation-timing-function:linear}` +
     `${cornerAt}${P}{stroke-dashoffset:${CORNER_OFFSET};animation-timing-function:cubic-bezier(0,.85,.25,1)}` +
@@ -146,31 +147,28 @@ function animationCss(): string {
     `${fadeEnd}${P}{stroke-dashoffset:0;opacity:0}` +
     `99.99${P}{stroke-dashoffset:1;opacity:0}` +
     `100${P}{stroke-dashoffset:1;opacity:1}}` +
-    `@media (prefers-reduced-motion:reduce){.ck{animation:none;stroke-dashoffset:0}}`
+    `@media (prefers-reduced-motion:reduce){.ck{animation:none}}`
   );
 }
 
 /**
- * 인증된 곳은 잎을 채우고 체크를 그린다. 인증이 없거나 취소된 경우 같은 실루엣을
- * 선으로만 그리고 체크를 뺀다 — 이미 남의 사이트에 붙어 있는 배지가 깨진 이미지가
- * 되지 않으면서, 인증 상태를 사실대로 낮춰 보여주기 위해서다.
+ * 배지는 인증된 사이트에만 발급하므로 형태는 하나뿐이다. 미인증용 대체 렌더링을
+ * 두지 않는 이유는 워드마크에 VERIFIED 가 박혀 있기 때문 — 잎을 선으로 바꾸고
+ * 체크만 빼도 방문자는 "VERIFIED"만 읽는다. 인증 안 된 곳에는 아무것도 내주지
+ * 않는 쪽이 맞다(엔드포인트에서 404).
  */
-function emblem(input: BadgeInput, p: Palette, inkX: number, inkY: number, scale: number): string {
-  const paint = input.verified
-    ? `fill="${p.ink}"`
-    : `fill="none" stroke="${p.ink}" stroke-width="${round(0.9 / scale)}" stroke-opacity="0.55" stroke-linejoin="round"`;
+function emblem(p: Palette, inkX: number, inkY: number, scale: number): string {
   const leaves = LEAVES.map((d) => `<path d="${d}"/>`).join('');
-  const check = input.verified
-    ? `<path class="ck" pathLength="1" d="${CHECK_PATH}" fill="none" stroke="${p.ink}" ` +
-      `stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`
-    : '';
+  const check =
+    `<path class="ck" pathLength="1" d="${CHECK_PATH}" fill="none" stroke="${p.ink}" ` +
+    `stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
 
   // 잉크의 좌상단이 (inkX, inkY)에 오도록 박스 여백만큼 되민다.
   const tx = inkX - INK_X * scale;
   const ty = inkY - INK_Y * scale;
   return (
     `<g transform="translate(${round(tx)} ${round(ty)}) scale(${round(scale)})">` +
-    `<g ${paint}>${leaves}</g>${check}</g>`
+    `<g fill="${p.ink}">${leaves}</g>${check}</g>`
   );
 }
 
@@ -196,8 +194,8 @@ function wordmarkBlock(x: number, centerY: number, p: Palette): string {
   );
 }
 
-function svgOpen(w: number, h: number, title: string, input: BadgeInput): string {
-  const style = input.verified ? `\n  <style>${animationCss()}</style>` : '';
+function svgOpen(w: number, h: number, title: string): string {
+  const style = `\n  <style>${animationCss()}</style>`;
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" ` +
     `role="img" aria-label="${escapeXml(title)}">\n  <title>${escapeXml(title)}</title>${style}`
@@ -205,7 +203,7 @@ function svgOpen(w: number, h: number, title: string, input: BadgeInput): string
 }
 
 /** 가로 락업: 엠블럼, 헤어라인, 두 줄 워드마크. 좌우 여백은 잉크 기준으로 맞춘다. */
-function renderStandard(input: BadgeInput, p: Palette, title: string): string {
+function renderStandard(p: Palette, title: string): string {
   const h = 38;
   const pad = 11;
   const gap = 10;
@@ -218,27 +216,27 @@ function renderStandard(input: BadgeInput, p: Palette, title: string): string {
   const wordX = w - pad - WORD_W;
   const dividerX = round(wordX - gap);
 
-  return `${svgOpen(w, h, title, input)}
+  return `${svgOpen(w, h, title)}
   <rect x="0.5" y="0.5" width="${w - 1}" height="${h - 1}" rx="6" fill="${p.bg}" stroke="${p.border}"/>
-  ${emblem(input, p, pad, (h - inkH) / 2, scale)}
+  ${emblem(p, pad, (h - inkH) / 2, scale)}
   <line x1="${dividerX}" y1="${h / 2 - 8}" x2="${dividerX}" y2="${h / 2 + 8}" stroke="${p.hairline}"/>
   ${wordmarkBlock(wordX, h / 2, p)}
 </svg>`;
 }
 
 /** 엠블럼 단독 — 아이콘 자리밖에 없는 푸터용. 잉크에 딱 맞춰 자른다. */
-function renderCompact(input: BadgeInput, p: Palette, title: string): string {
+function renderCompact(p: Palette, title: string): string {
   const inkH = 30;
   const scale = inkH / INK_H;
   const w = Math.round(INK_W * scale);
   const h = Math.round(inkH);
-  return `${svgOpen(w, h, title, input)}
-  ${emblem(input, p, (w - INK_W * scale) / 2, 0, scale)}
+  return `${svgOpen(w, h, title)}
+  ${emblem(p, (w - INK_W * scale) / 2, 0, scale)}
 </svg>`;
 }
 
 /** 씰 — 엠블럼을 키우고 아래에 두 줄 워드마크를 쌓는다. */
-function renderSeal(input: BadgeInput, p: Palette, title: string): string {
+function renderSeal(p: Palette, title: string): string {
   const size = 96;
   const inkH = 48;
   const scale = inkH / INK_H;
@@ -246,8 +244,8 @@ function renderSeal(input: BadgeInput, p: Palette, title: string): string {
   const inkTop = 10;
   const dividerY = inkTop + inkH + 8;
 
-  return `${svgOpen(size, size, title, input)}
-  ${emblem(input, p, (size - inkW) / 2, inkTop, scale)}
+  return `${svgOpen(size, size, title)}
+  ${emblem(p, (size - inkW) / 2, inkTop, scale)}
   <line x1="${size / 2 - 16}" y1="${dividerY}" x2="${size / 2 + 16}" y2="${dividerY}" stroke="${p.hairline}"/>
   ${wordmarkBlock((size - WORD_W) / 2, dividerY + 12, p)}
 </svg>`;
@@ -255,9 +253,9 @@ function renderSeal(input: BadgeInput, p: Palette, title: string): string {
 
 export function renderBadgeSvg(input: BadgeInput, title: string): string {
   const palette = PALETTES[input.theme];
-  if (input.style === 'compact') return renderCompact(input, palette, title);
-  if (input.style === 'seal') return renderSeal(input, palette, title);
-  return renderStandard(input, palette, title);
+  if (input.style === 'compact') return renderCompact(palette, title);
+  if (input.style === 'seal') return renderSeal(palette, title);
+  return renderStandard(palette, title);
 }
 
 export function badgeImageUrl(slug: string, style: BadgeStyle, theme: BadgeTheme): string {
