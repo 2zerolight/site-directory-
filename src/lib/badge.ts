@@ -7,7 +7,7 @@ export type BadgeStyle = (typeof BADGE_STYLES)[number];
 export type BadgeTheme = (typeof BADGE_THEMES)[number];
 
 export interface BadgeInput {
-  /** Only a real `ownership_verified` row may claim "인증". */
+  /** 소유권 인증된 사이트만 체크와 애니메이션을 받는다. */
   verified: boolean;
   style: BadgeStyle;
   theme: BadgeTheme;
@@ -21,37 +21,56 @@ export function parseBadgeTheme(raw: string | null): BadgeTheme {
   return (BADGE_THEMES as readonly string[]).includes(raw ?? '') ? (raw as BadgeTheme) : 'light';
 }
 
-const FONT_STACK = "-apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif";
+const FONT_STACK = "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif";
+const WORDMARK = 'SITEDA.KR';
+
+/**
+ * 월계관 잎 14장(좌우 7쌍). 반지름 15.5의 호 위에 잎의 *중심*을 얹어 서로 겹치게
+ * 배치했다. 잎 밑동을 호에 붙이면 바깥으로만 뻗어 가시관처럼 보이고 월계관으로
+ * 안 읽힌다 — 월계관 느낌은 겹쳐서 생기는 덩어리감에서 나온다.
+ * 좌표는 56x52 기준. 승인된 시안과 픽셀 단위로 같게 두려고 상수로 박았다.
+ */
+const LEAVES = [
+  'M27.79 41.17Q24.57 37.55 21.14 40.98Q24.4 43.33 27.79 41.17Z',
+  'M23.3 40.4Q21.28 35.6 16.6 37.9Q19.1 41.42 23.3 40.4Z',
+  'M18.5 37.69Q18.42 32.42 13.17 32.81Q14.18 37.06 18.5 37.69Z',
+  'M15.36 33.93Q16.9 29.17 12.06 27.91Q11.67 32.04 15.36 33.93Z',
+  'M13.63 29.2Q16.29 25.64 12.59 23.19Q11.07 26.55 13.63 29.2Z',
+  'M13.81 23.37Q16.98 21.45 14.89 18.4Q12.66 20.52 13.81 23.37Z',
+  'M15.86 18.76Q18.68 18.15 17.91 15.38Q15.74 16.37 15.86 18.76Z',
+  'M28.21 41.17Q31.64 44.6 34.86 40.98Q31.47 38.82 28.21 41.17Z',
+  'M32.7 40.4Q37.37 42.71 39.4 37.9Q35.2 36.88 32.7 40.4Z',
+  'M37.5 37.69Q42.75 38.08 42.83 32.81Q38.51 33.44 37.5 37.69Z',
+  'M40.64 33.93Q45.48 32.67 43.94 27.91Q40.25 29.8 40.64 33.93Z',
+  'M42.37 29.2Q46.08 26.75 43.41 23.19Q40.86 25.84 42.37 29.2Z',
+  'M42.19 23.37Q44.28 20.31 41.11 18.4Q39.97 21.25 42.19 23.37Z',
+  'M40.14 18.76Q40.91 15.98 38.09 15.38Q37.96 17.76 40.14 18.76Z',
+] as const;
+
+/** 왼쪽 끝 -> 꺾임 -> 오른쪽 끝. 월계관이 아래로 쏠려 있어 체크도 1.8 내려 앉혔다. */
+const CHECK_PATH = 'M23.53 28.07l3.13 3.22L32.47 24.58';
+
+/**
+ * 체크 두 획의 길이 비. 왼쪽(내려긋기) 4.49 : 오른쪽(올려긋기) 8.88 이라
+ * 꺾임점이 경로의 33.6% 지점이고, pathLength=1 기준 dashoffset 0.664다.
+ * 이 지점에서 이징이 갈린다.
+ */
+const CORNER_OFFSET = 0.664;
+
+const EMBLEM_W = 56;
+const EMBLEM_H = 52;
 
 interface Palette {
   bg: string;
   border: string;
-  markBg: string;
-  markFg: string;
-  label: string;
-  value: string;
-  accent: string;
+  ink: string;
+  word: string;
+  hairline: string;
 }
 
 const PALETTES: Record<BadgeTheme, Palette> = {
-  light: {
-    bg: '#ffffff',
-    border: '#e2e8f0',
-    markBg: '#0f172a',
-    markFg: '#ffffff',
-    label: '#64748b',
-    value: '#0f172a',
-    accent: '#2563eb',
-  },
-  dark: {
-    bg: '#0f172a',
-    border: '#334155',
-    markBg: '#ffffff',
-    markFg: '#0f172a',
-    label: '#94a3b8',
-    value: '#f8fafc',
-    accent: '#60a5fa',
-  },
+  light: { bg: '#ffffff', border: '#e2e8f0', ink: '#0f172a', word: '#0f172a', hairline: '#cbd5e1' },
+  dark: { bg: '#0f172a', border: '#334155', ink: '#f8fafc', word: '#f8fafc', hairline: '#475569' },
 };
 
 function round(n: number): number {
@@ -67,126 +86,125 @@ function escapeXml(value: string): string {
     .replace(/'/g, '&apos;');
 }
 
-/**
- * Rough advance-width estimate. The badge ships as a standalone SVG rendered by
- * whatever font the visitor's OS resolves, so exact metrics are unknowable —
- * we only need enough accuracy to keep text off the border.
- */
-function textWidth(text: string, fontSize: number, weight: number): number {
+function wordmarkWidth(fontSize: number, letterSpacing: number): number {
   let units = 0;
-  for (const ch of text) {
-    const code = ch.codePointAt(0) ?? 0;
-    if (code > 0x2e80) units += 1;
-    else if (/[iljtfrI.,:;'`|!\[\]()]/.test(ch)) units += 0.33;
-    else if (/[A-Z0-9@#%&]/.test(ch)) units += 0.62;
-    else if (/[mwMW]/.test(ch)) units += 0.85;
-    else units += 0.54;
-  }
-  return units * fontSize * (weight >= 600 ? 1.03 : 1);
+  for (const ch of WORDMARK) units += /[I.]/.test(ch) ? 0.34 : 0.66;
+  return units * fontSize + letterSpacing * (WORDMARK.length - 1);
 }
 
-function brandLine(): string {
-  return '사이트다';
-}
-
-function statusLine(verified: boolean): string {
-  return verified ? '인증된 등록 사이트' : '등록된 사이트';
-}
-
-/** Human-readable text used for the badge's alt/aria label. */
+/** 배지에는 한글이 없으므로 의미는 alt 텍스트가 담는다. */
 export function badgeAltText(siteName: string, verified: boolean): string {
   return `${siteName} · 사이트다 ${verified ? '인증된 등록 사이트' : '등록된 사이트'}`;
 }
 
 /**
- * Verified check tucked into the mark's bottom-right corner, ringed in the
- * badge background so it reads as sitting on top of the mark.
+ * 체크가 왼쪽 끝에서 오른쪽 끝으로 그려지고, 유지했다가 0.15초 디졸브로 사라진 뒤
+ * 반복한다. 왼쪽 획은 등속으로 긋다가 꺾임점부터 오른쪽 획이 빨라진다 — 시간은
+ * 62:38로 나누는데 길이 비가 34:66이라 오른쪽이 약 3.2배 빠르다.
+ *
+ * `<img>`로 넣어도 SVG 내부의 CSS 애니메이션은 실행된다(JS만 차단된다).
+ * 모션 최소화를 켠 방문자에게는 완성된 체크로 고정해 보여준다.
  */
-function verifiedCheck(cx: number, cy: number, r: number, accent: string, ring: string): string {
-  const s = r * 0.5;
+function animationCss(): string {
+  const cycle = 5;
+  const drawEnd = 42;
+  const cornerAt = round(drawEnd * 0.62);
+  const holdEnd = 86;
+  const fadeEnd = round(holdEnd + (0.15 / cycle) * 100);
+  const P = '%';
+
   return (
-    `<circle cx="${cx}" cy="${cy}" r="${r + 1.6}" fill="${ring}"/>` +
-    `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${accent}"/>` +
-    `<path d="M${cx - s} ${cy + s * 0.05} l${s * 0.7} ${s * 0.72} L${cx + s} ${cy - s * 0.66}" ` +
-    `fill="none" stroke="#ffffff" stroke-width="${r * 0.3}" stroke-linecap="round" stroke-linejoin="round"/>`
+    `.ck{stroke-dasharray:1;stroke-dashoffset:1;animation:sdck ${cycle}s infinite}` +
+    `@keyframes sdck{` +
+    `0${P}{stroke-dashoffset:1;opacity:1;animation-timing-function:linear}` +
+    `${cornerAt}${P}{stroke-dashoffset:${CORNER_OFFSET};animation-timing-function:cubic-bezier(0,.85,.25,1)}` +
+    `${drawEnd}${P}{stroke-dashoffset:0;opacity:1;animation-timing-function:linear}` +
+    `${holdEnd}${P}{stroke-dashoffset:0;opacity:1}` +
+    `${fadeEnd}${P}{stroke-dashoffset:0;opacity:0}` +
+    `99.99${P}{stroke-dashoffset:1;opacity:0}` +
+    `100${P}{stroke-dashoffset:1;opacity:1}}` +
+    `@media (prefers-reduced-motion:reduce){.ck{animation:none;stroke-dashoffset:0}}`
   );
 }
 
-function mark(x: number, y: number, size: number, glyphSize: number, p: Palette): string {
+/**
+ * 인증된 곳은 잎을 채우고 체크를 그린다. 인증이 없거나 취소된 경우 같은 실루엣을
+ * 선으로만 그리고 체크를 뺀다 — 이미 남의 사이트에 붙어 있는 배지가 깨진 이미지가
+ * 되지 않으면서, 인증 상태를 사실대로 낮춰 보여주기 위해서다.
+ */
+function emblem(input: BadgeInput, p: Palette, x: number, y: number, scale: number): string {
+  const paint = input.verified
+    ? `fill="${p.ink}"`
+    : `fill="none" stroke="${p.ink}" stroke-width="${round(0.9 / scale)}" stroke-opacity="0.55" stroke-linejoin="round"`;
+  const leaves = LEAVES.map((d) => `<path d="${d}"/>`).join('');
+  const check = input.verified
+    ? `<path class="ck" pathLength="1" d="${CHECK_PATH}" fill="none" stroke="${p.ink}" ` +
+      `stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`
+    : '';
+
   return (
-    `<rect x="${x}" y="${y}" width="${size}" height="${size}" rx="${round(size * 0.28)}" fill="${p.markBg}"/>` +
-    `<text x="${x + size / 2}" y="${y + size * 0.72}" font-family="${FONT_STACK}" font-size="${glyphSize}" ` +
-    `font-weight="800" fill="${p.markFg}" text-anchor="middle">사</text>`
+    `<g transform="translate(${round(x)} ${round(y)}) scale(${round(scale)})">` +
+    `<g ${paint}>${leaves}</g>${check}</g>`
   );
 }
 
+function wordmark(x: number, y: number, fontSize: number, letterSpacing: number, fill: string): string {
+  return (
+    `<text x="${round(x)}" y="${round(y)}" font-family="${FONT_STACK}" font-size="${fontSize}" ` +
+    `font-weight="700" fill="${fill}" letter-spacing="${letterSpacing}">${WORDMARK}</text>`
+  );
+}
+
+function svgOpen(w: number, h: number, title: string, input: BadgeInput): string {
+  const style = input.verified ? `\n  <style>${animationCss()}</style>` : '';
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" ` +
+    `role="img" aria-label="${escapeXml(title)}">\n  <title>${escapeXml(title)}</title>${style}`
+  );
+}
+
+/** 가로 락업: 엠블럼, 헤어라인, 워드마크. */
 function renderStandard(input: BadgeInput, p: Palette, title: string): string {
-  const brand = brandLine();
-  const status = statusLine(input.verified);
-  const h = 52;
-  const padX = 12;
-  const markSize = 32;
-  const markX = padX;
-  const markY = 10;
-  const dividerX = markX + markSize + 12;
-  const textX = dividerX + 12;
-  const brandSize = 13.5;
-  const statusSize = 10.5;
-
-  const textW = Math.max(textWidth(brand, brandSize, 700), textWidth(status, statusSize, 500));
-  const w = Math.round(textX + textW + padX);
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeXml(title)}">
-  <title>${escapeXml(title)}</title>
-  <rect x="0.5" y="0.5" width="${w - 1}" height="${h - 1}" rx="8" fill="${p.bg}" stroke="${p.border}"/>
-  ${mark(markX, markY, markSize, 19.5, p)}
-  ${input.verified ? verifiedCheck(markX + markSize - 4, markY + markSize - 4, 6.5, p.accent, p.bg) : ''}
-  <line x1="${dividerX}" y1="12" x2="${dividerX}" y2="40" stroke="${p.border}"/>
-  <text x="${textX}" y="25" font-family="${FONT_STACK}" font-size="${brandSize}" font-weight="700" fill="${p.value}" letter-spacing="-0.1">${escapeXml(brand)}</text>
-  <text x="${textX}" y="40" font-family="${FONT_STACK}" font-size="${statusSize}" font-weight="500" fill="${p.label}">${escapeXml(status)}</text>
-</svg>`;
-}
-
-function renderCompact(input: BadgeInput, p: Palette, title: string): string {
-  // A 32px badge has no room for both a mark and a check glyph, so the status
-  // word itself carries the colour: accent when verified, muted when not.
-  const word = input.verified ? '인증' : '등록';
-  const full = `사이트다 ${word}`;
-  const h = 32;
+  const h = 36;
   const padX = 10;
-  const markSize = 20;
-  const markX = padX;
-  const markY = 6;
-  const textX = markX + markSize + 9;
-  const fontSize = 11;
+  const scale = 30 / EMBLEM_H;
+  const emblemW = EMBLEM_W * scale;
+  const dividerX = padX + emblemW + 9;
+  const wordX = dividerX + 10;
+  const fontSize = 9;
+  const letterSpacing = 1.3;
+  const w = Math.round(wordX + wordmarkWidth(fontSize, letterSpacing) + padX);
 
-  const w = Math.round(textX + textWidth(full, fontSize, 600) + padX);
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeXml(title)}">
-  <title>${escapeXml(title)}</title>
+  return `${svgOpen(w, h, title, input)}
   <rect x="0.5" y="0.5" width="${w - 1}" height="${h - 1}" rx="6" fill="${p.bg}" stroke="${p.border}"/>
-  ${mark(markX, markY, markSize, 12, p)}
-  <text x="${textX}" y="21" font-family="${FONT_STACK}" font-size="${fontSize}" font-weight="600" letter-spacing="-0.1"><tspan fill="${p.value}">사이트다 </tspan><tspan fill="${input.verified ? p.accent : p.label}" font-weight="700">${word}</tspan></text>
+  ${emblem(input, p, padX, (h - EMBLEM_H * scale) / 2, scale)}
+  <line x1="${dividerX}" y1="10" x2="${dividerX}" y2="26" stroke="${p.hairline}"/>
+  ${wordmark(wordX, 21.5, fontSize, letterSpacing, p.word)}
 </svg>`;
 }
 
-function renderSeal(input: BadgeInput, p: Palette, title: string): string {
-  const size = 104;
-  const c = size / 2;
-  const status = input.verified ? '인증 완료' : '등록 완료';
-  const markSize = 26;
-  const markX = c - markSize / 2;
-  const markY = 17;
+/** 엠블럼 단독 — 아이콘 자리밖에 없는 푸터용. */
+function renderCompact(input: BadgeInput, p: Palette, title: string): string {
+  const h = 32;
+  const scale = h / EMBLEM_H;
+  const w = Math.round(EMBLEM_W * scale);
+  return `${svgOpen(w, h, title, input)}
+  ${emblem(input, p, 0, 0, scale)}
+</svg>`;
+}
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${escapeXml(title)}">
-  <title>${escapeXml(title)}</title>
-  <circle cx="${c}" cy="${c}" r="${c - 1}" fill="${p.bg}" stroke="${p.border}"/>
-  <circle cx="${c}" cy="${c}" r="${c - 6}" fill="none" stroke="${p.border}" stroke-opacity="0.65"/>
-  ${mark(markX, markY, markSize, 16, p)}
-  ${input.verified ? verifiedCheck(markX + markSize - 3, markY + markSize - 3, 5.6, p.accent, p.bg) : ''}
-  <text x="${c}" y="62" font-family="${FONT_STACK}" font-size="12.5" font-weight="700" fill="${p.value}" text-anchor="middle" letter-spacing="-0.2">사이트다</text>
-  <line x1="${c - 15}" y1="70" x2="${c + 15}" y2="70" stroke="${p.border}"/>
-  <text x="${c}" y="84" font-family="${FONT_STACK}" font-size="9.5" font-weight="500" fill="${p.label}" text-anchor="middle">${escapeXml(status)}</text>
+/** 씰 — 엠블럼을 키우고 아래에 워드마크. */
+function renderSeal(input: BadgeInput, p: Palette, title: string): string {
+  const size = 96;
+  const scale = 62 / EMBLEM_H;
+  const emblemW = EMBLEM_W * scale;
+  const fontSize = 8;
+  const letterSpacing = 1.2;
+
+  return `${svgOpen(size, size, title, input)}
+  ${emblem(input, p, (size - emblemW) / 2, 6, scale)}
+  <line x1="${size / 2 - 16}" y1="76" x2="${size / 2 + 16}" y2="76" stroke="${p.hairline}"/>
+  ${wordmark(size / 2 - wordmarkWidth(fontSize, letterSpacing) / 2, 89, fontSize, letterSpacing, p.word)}
 </svg>`;
 }
 

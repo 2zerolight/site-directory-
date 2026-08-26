@@ -326,10 +326,12 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
 
     {isApproved && (
       <a
-        href={`/badge/${site.slug}`}
+        href={site.ownership_verified ? `/badge/${site.slug}` : `/submit/verify/${site.slug}`}
         class="mt-4 inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs text-slate-500 hover:border-slate-400 hover:text-slate-900"
       >
-        이 사이트 운영자세요? {site.ownership_verified ? '인증' : '등록'} 배지 받기 →
+        {site.ownership_verified
+          ? '이 사이트 운영자세요? 인증 배지 받기 →'
+          : '이 사이트 운영자세요? 소유권 인증하고 배지 받기 →'}
       </a>
     )}
 
