@@ -337,6 +337,7 @@ export interface SiteSubmissionInput {
   otherSnsUrl: string | null;
   verificationToken: string;
   submittedEmail: string | null;
+  thirdPartySubmission: boolean;
 }
 
 export async function insertSiteSubmission(db: D1Database, data: SiteSubmissionInput): Promise<number> {
@@ -348,8 +349,8 @@ export async function insertSiteSubmission(db: D1Database, data: SiteSubmissionI
         main_keywords, service_keywords,
         operator_name, business_name, service_region, customer_center, contact_email,
         blog_url, youtube_url, instagram_url, facebook_url, other_sns_url,
-        verification_token, status, submitted_email
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`
+        verification_token, status, submitted_email, third_party_submission
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
     )
     .bind(
       data.slug,
@@ -377,7 +378,8 @@ export async function insertSiteSubmission(db: D1Database, data: SiteSubmissionI
       data.facebookUrl,
       data.otherSnsUrl,
       data.verificationToken,
-      data.submittedEmail
+      data.submittedEmail,
+      data.thirdPartySubmission ? 1 : 0
     )
     .run();
 

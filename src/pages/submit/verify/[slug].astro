@@ -3,13 +3,24 @@ import { env } from 'cloudflare:workers';
 import Layout from '../../../layouts/Layout.astro';
 import { getSiteBySlug, markThirdPartySubmission } from '../../../lib/db';
 import { verifyOwnership } from '../../../lib/verify';
+import { renderNotFound } from '../../../lib/not-found';
 import { VERIFICATION_META_NAME, VERIFICATION_TXT_SUBDOMAIN } from '../../../lib/constants';
+import { ADMIN_COOKIE_NAME, isValidSessionCookieValue } from '../../../lib/auth';
+
+// 이 페이지는 인증 토큰을 그대로 보여주고, 누르면 서버가 대상 사이트를 fetch 한다.
+// slug 는 상세 페이지 URL 이자 sitemap 에 전부 실려 있어 사실상 공개 정보라,
+// 공개해두면 누구나 남의 토큰을 읽고 남의 등록 상태를 바꿀 수 있었다.
+// 소유권 인증은 운영자가 연락해오면 관리자가 직접 처리하는 방식으로 바꿨다.
+const isAdmin = await isValidSessionCookieValue(
+  env.ADMIN_PASSWORD,
+  Astro.cookies.get(ADMIN_COOKIE_NAME)?.value
+);
 
 const { slug } = Astro.params;
-const site = slug ? await getSiteBySlug(env.DB, slug) : null;
+const site = isAdmin && slug ? await getSiteBySlug(env.DB, slug) : null;
 
 if (!site) {
-  return Astro.redirect('/404');
+  return renderNotFound(Astro);
 }
 
 let checkResult: { ok: boolean; method: 'meta_tag' | 'dns_txt' | null } | null = null;
