@@ -10,3 +10,9 @@ export const CONTACT_EMAIL = 'contact@siteda.kr';
  * (문서를 고쳐놓고 날짜를 안 올리면 이용자가 변경 사실을 알 방법이 없다)
  */
 export const POLICY_EFFECTIVE_DATE = '2026년 8월 27일';
+
+/** Google Analytics 4 측정 ID. 동의 전에는 로드되지 않는다 — Layout.astro 참고. */
+export const GA_MEASUREMENT_ID = 'G-2G6NNJJCFZ';
+
+/** 동의 여부를 저장하는 localStorage 키. 값은 'granted' | 'denied'. */
+export const CONSENT_STORAGE_KEY = 'siteda_cookie_consent';

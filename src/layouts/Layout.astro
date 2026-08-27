@@ -2,7 +2,8 @@
 import '../styles/global.css';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
-import { SITE_NAME, SITE_URL } from '../lib/site';
+import CookieConsent from '../components/CookieConsent.astro';
+import { SITE_NAME, SITE_URL, GA_MEASUREMENT_ID } from '../lib/site';
 
 interface Props {
   title: string;
@@ -51,13 +52,79 @@ const ogImageUrl = new URL(image || '/og-image.png', SITE_URL).toString();
       <script type="application/ld+json" set:html={JSON.stringify(block)} is:inline />
     ))}
 
-    <script async is:inline src="https://www.googletagmanager.com/gtag/js?id=G-2G6NNJJCFZ"></script>
-    <script is:inline>
+    {/*
+      Google Analytics 는 이용자가 동의하기 전까지 로드하지 않는다. 여기서는 Consent Mode 의
+      기본값을 전부 denied 로 선언하고 config 호출만 dataLayer 에 쌓아둔다. 동의가 들어오면
+      sitedaGrantConsent() 가 gtag.js 를 주입하고, 큐에 쌓여 있던 호출이 그때 처리된다.
+      동의 전에는 Google 로 나가는 요청 자체가 없다. (CookieConsent.astro 와 한 쌍)
+    */}
+    <script is:inline define:vars={{ GA_MEASUREMENT_ID }}>
       window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
+      function gtag() {
+        dataLayer.push(arguments);
+      }
 
-      gtag('config', 'G-2G6NNJJCFZ');
+      gtag('consent', 'default', {
+        ad_storage: 'denied',
+        ad_user_data: 'denied',
+        ad_personalization: 'denied',
+        analytics_storage: 'denied',
+        functionality_storage: 'granted',
+        security_storage: 'granted',
+      });
+
+      gtag('js', new Date());
+      gtag('config', GA_MEASUREMENT_ID);
+
+      window.sitedaGrantConsent = function () {
+        if (window.sitedaConsentGranted) return;
+        window.sitedaConsentGranted = true;
+
+        gtag('consent', 'update', {
+          ad_storage: 'granted',
+          ad_user_data: 'granted',
+          ad_personalization: 'granted',
+          analytics_storage: 'granted',
+        });
+
+        const tag = document.createElement('script');
+        tag.async = true;
+        tag.src = 'https://www.googletagmanager.com/gtag/js?id=' + GA_MEASUREMENT_ID;
+        document.head.appendChild(tag);
+      };
+
+      // 동의 철회. Consent Mode 를 denied 로 되돌리는 것만으로는 부족하다 —
+      // 동의했던 동안 이미 심어진 _ga 쿠키가 그대로 남아 이용자를 계속 식별한다.
+      // 철회의 의미가 있으려면 그 쿠키까지 지워야 한다.
+      window.sitedaRevokeConsent = function () {
+        window.sitedaConsentGranted = false;
+
+        gtag('consent', 'update', {
+          ad_storage: 'denied',
+          ad_user_data: 'denied',
+          ad_personalization: 'denied',
+          analytics_storage: 'denied',
+        });
+
+        const names = document.cookie
+          .split(';')
+          .map((c) => c.split('=')[0].trim())
+          .filter((name) => /^(_ga|_gid|_gat)/.test(name));
+
+        // 쿠키는 설정된 domain 이 정확히 일치해야 지워진다. GA 가 어느 레벨에
+        // 심었는지 알 수 없으므로 호스트명의 모든 상위 도메인에 대해 시도한다.
+        const parts = location.hostname.split('.');
+        const domains = [null];
+        for (let i = 0; i < parts.length - 1; i++) {
+          domains.push('.' + parts.slice(i).join('.'));
+        }
+
+        names.forEach((name) => {
+          domains.forEach((domain) => {
+            document.cookie = name + '=; Max-Age=0; path=/' + (domain ? '; domain=' + domain : '');
+          });
+        });
+      };
     </script>
   </head>
   <body class="min-h-screen flex flex-col bg-slate-50 text-slate-900">
@@ -66,6 +133,7 @@ const ogImageUrl = new URL(image || '/og-image.png', SITE_URL).toString();
       <slot />
     </main>
     <Footer />
+    <CookieConsent />
 
     <script>
       const BOOKMARK_KEY = 'siteda_bookmarks';
