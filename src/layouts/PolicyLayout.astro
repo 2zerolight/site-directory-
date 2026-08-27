@@ -1,0 +1,28 @@
+---
+import Layout from './Layout.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  canonicalPath: string;
+  /** 시행일. 약관·방침처럼 발효 시점이 의미 있는 문서에만 넣는다. */
+  effectiveDate?: string;
+  intro?: string;
+}
+
+const { title, description, canonicalPath, effectiveDate, intro } = Astro.props;
+---
+
+<Layout title={title} description={description} canonicalPath={canonicalPath}>
+  <nav class="text-sm text-slate-400 mb-4">
+    <a href="/" class="hover:text-slate-600">홈</a> <span class="mx-1">/</span> {title}
+  </nav>
+
+  <h1 class="text-2xl font-bold text-slate-900">{title}</h1>
+  {intro && <p class="mt-2 text-slate-500">{intro}</p>}
+  {effectiveDate && <p class="mt-2 text-xs text-slate-400">시행일: {effectiveDate}</p>}
+
+  <div class="policy-prose mt-8 max-w-3xl rounded-lg border border-slate-200 bg-white p-5 sm:p-8">
+    <slot />
+  </div>
+</Layout>
