@@ -8,6 +8,7 @@ import { generateVerificationToken } from '../lib/verify';
 import { normalizeRequiredUrl, normalizeOptionalUrl } from '../lib/urls';
 import { REGIONS, SITE_TYPES, PLATFORMS } from '../lib/constants';
 import { CONTACT_EMAIL } from '../lib/site';
+import { readTelegramConfig, notifyNewSubmission } from '../lib/telegram';
 import type { Category, Subcategory } from '../types';
 
 const categories = await getCategories(env.DB);
@@ -120,7 +121,7 @@ if (Astro.request.method === 'POST') {
   } else {
     const token = generateVerificationToken();
     const slug = slugify(formValues.name);
-    await insertSiteSubmission(env.DB, {
+    const newSiteId = await insertSiteSubmission(env.DB, {
       slug,
       name: formValues.name,
       url: normalizedUrl.toString(),
@@ -149,6 +150,35 @@ if (Astro.request.method === 'POST') {
       submittedEmail: formValues.email || null,
       thirdPartySubmission: formValues.notOwner,
     });
+
+    // 등록 요청이 들어온 것을 텔레그램으로 알린다. 관리자 화면을 주기적으로
+    // 들여다보지 않으면 승인이 밀리는데, 대기 중인 등록은 검색에 잡히지 않으므로
+    // 제출자 입장에서는 아무 일도 일어나지 않은 것과 같다.
+    //
+    // 알림 실패가 등록 실패로 이어지면 안 되므로 오류는 삼킨다. 응답을 보낸 뒤
+    // 워커가 종료되면 남은 요청이 취소될 수 있어 여기서는 기다렸다 보낸다 —
+    // 제출은 드문 동작이라 몇백 밀리초는 감수할 만하다.
+    const telegram = readTelegramConfig(env);
+    if (telegram) {
+      try {
+        await notifyNewSubmission(telegram, {
+          id: newSiteId,
+          name: formValues.name,
+          url: normalizedUrl.toString(),
+          tagline: formValues.tagline,
+          description: formValues.description,
+          categoryName: category.name,
+          subcategoryName: subcategory ? subcategory.name : null,
+          region: formValues.region || null,
+          siteType: formValues.siteType || null,
+          operatorName: formValues.operatorName || null,
+          submittedEmail: formValues.email || null,
+          thirdPartySubmission: formValues.notOwner,
+        });
+      } catch {
+        // 알림은 부가 기능이다. 실패해도 등록은 이미 저장되어 있다.
+      }
+    }
     redirectSlug = slug;
   }
 }
