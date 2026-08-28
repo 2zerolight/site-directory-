@@ -7,6 +7,7 @@ import { slugify } from '../lib/slugify';
 import { generateVerificationToken } from '../lib/verify';
 import { normalizeRequiredUrl, normalizeOptionalUrl } from '../lib/urls';
 import { REGIONS, SITE_TYPES, PLATFORMS } from '../lib/constants';
+import { CONTACT_EMAIL } from '../lib/site';
 import type { Category, Subcategory } from '../types';
 
 const categories = await getCategories(env.DB);
@@ -44,6 +45,7 @@ type FormValues = {
   facebookUrl: string;
   otherSnsUrl: string;
   email: string;
+  notOwner: boolean;
 };
 
 const emptyValues: FormValues = {
@@ -53,6 +55,7 @@ const emptyValues: FormValues = {
   operatorName: '', businessName: '', serviceRegion: '', customerCenter: '', contactEmail: '',
   blogUrl: '', youtubeUrl: '', instagramUrl: '', facebookUrl: '', otherSnsUrl: '',
   email: '',
+  notOwner: false,
 };
 
 let errorMessage = '';
@@ -74,6 +77,7 @@ if (Astro.request.method === 'POST') {
     blogUrl: get('blogUrl'), youtubeUrl: get('youtubeUrl'), instagramUrl: get('instagramUrl'),
     facebookUrl: get('facebookUrl'), otherSnsUrl: get('otherSnsUrl'),
     email: get('email'),
+    notOwner: get('notOwner') === 'on',
   };
 
   const categoryId = Number(formValues.categoryId || '');
@@ -143,6 +147,7 @@ if (Astro.request.method === 'POST') {
       otherSnsUrl: otherSns.value,
       verificationToken: token,
       submittedEmail: formValues.email || null,
+      thirdPartySubmission: formValues.notOwner,
     });
     redirectSlug = slug;
   }
@@ -152,8 +157,12 @@ if (redirectSlug === '__bot__') {
   return Astro.redirect('/submit');
 }
 if (redirectSlug) {
-  return Astro.redirect(`/submit/verify/${redirectSlug}`);
+  // 소유권 인증은 더 이상 셀프 서비스가 아니다. 제출 직후 인증 페이지로 보내지 않고
+  // 접수 안내만 띄운다. 인증·배지는 운영자가 연락해오면 관리자가 직접 처리한다.
+  return Astro.redirect('/submit?submitted=1');
 }
+
+const justSubmitted = Astro.url.searchParams.get('submitted') === '1';
 
 const inputClass =
   'mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-slate-900 focus:bg-white focus:outline-none focus:ring-4 focus:ring-slate-900/5';
@@ -171,21 +180,26 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
     <p class="mt-2 text-slate-500">등록 요청은 검토 후 승인되면 디렉토리에 노출됩니다.</p>
 
     <ol class="mt-6 flex items-center gap-2 text-xs text-slate-400 sm:text-sm">
-      <li class="flex items-center gap-2 font-semibold text-slate-900">
-        <span class="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-[11px] text-white">1</span>
+      <li class={`flex items-center gap-2 ${justSubmitted ? '' : 'font-semibold text-slate-900'}`}>
+        <span class={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] ${justSubmitted ? 'border border-slate-300 text-slate-400' : 'bg-slate-900 text-white'}`}>1</span>
         정보 입력
       </li>
       <li class="h-px flex-1 bg-slate-200"></li>
-      <li class="flex items-center gap-2">
-        <span class="flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-[11px] text-slate-400">2</span>
-        소유권 인증
-      </li>
-      <li class="h-px flex-1 bg-slate-200"></li>
-      <li class="flex items-center gap-2">
-        <span class="flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-[11px] text-slate-400">3</span>
-        승인 및 노출
+      <li class={`flex items-center gap-2 ${justSubmitted ? 'font-semibold text-slate-900' : ''}`}>
+        <span class={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] ${justSubmitted ? 'bg-slate-900 text-white' : 'border border-slate-300 text-slate-400'}`}>2</span>
+        검토 및 노출
       </li>
     </ol>
+
+    {justSubmitted && (
+      <div class="mt-6 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+        <p class="font-semibold">등록 요청이 접수되었습니다.</p>
+        <p class="mt-1.5 text-green-700">
+          검토 후 승인되면 디렉토리에 노출됩니다. 직접 운영하시는 사이트라 소유권 인증과 인증 배지를 원하시면
+          <a href={`mailto:${CONTACT_EMAIL}`} class="underline underline-offset-2">{CONTACT_EMAIL}</a>로 사이트 주소와 함께 알려주세요.
+        </p>
+      </div>
+    )}
 
     {errorMessage && (
       <div class="mt-6 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
@@ -375,6 +389,26 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
           <label class={labelClass} for="email"><span>연락용 이메일 (선택)</span></label>
           <input id="email" name="email" type="email" value={formValues.email} class={inputClass} />
         </div>
+
+        {/*
+          예전에는 인증 페이지에서 "제 사이트가 아니에요"를 눌러 알렸는데, 그 페이지가
+          관리자 전용이 되면서 알릴 곳이 없어졌다. 제3자 제출인지는 관리자가 검토할 때
+          꼭 필요한 정보라 등록 폼으로 옮겼다.
+        */}
+        <label class="flex items-start gap-2.5 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            name="notOwner"
+            checked={formValues.notOwner}
+            class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+          />
+          <span>
+            제가 운영하는 사이트가 아닙니다
+            <span class="mt-0.5 block text-xs text-slate-400">
+              소유자가 아니어도 등록할 수 있어요. 체크하시면 관리자가 조금 더 꼼꼼히 확인한 뒤 승인합니다.
+            </span>
+          </span>
+        </label>
       </FormSection>
 
       <div class="hidden" aria-hidden="true">
@@ -384,7 +418,7 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
 
       <div class="sticky bottom-4 z-10 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur">
         <div class="flex items-center justify-between gap-4">
-          <p class="hidden text-xs text-slate-400 sm:block">제출 후 소유권 인증 페이지로 자동 이동합니다.</p>
+          <p class="hidden text-xs text-slate-400 sm:block">제출 후 관리자 검토를 거쳐 승인되면 노출됩니다.</p>
           <button
             type="submit"
             class="ml-auto rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 active:scale-[0.98]"

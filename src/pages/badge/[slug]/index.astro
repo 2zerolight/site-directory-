@@ -3,6 +3,7 @@ import { env } from 'cloudflare:workers';
 import Layout from '../../../layouts/Layout.astro';
 import { getSiteBySlug } from '../../../lib/db';
 import { renderNotFound } from '../../../lib/not-found';
+import { ADMIN_COOKIE_NAME, isValidSessionCookieValue } from '../../../lib/auth';
 import { decodeHostnameForDisplay } from '../../../lib/urls';
 import {
   BADGE_STYLES,
@@ -15,8 +16,16 @@ import {
   type BadgeTheme,
 } from '../../../lib/badge';
 
+// 배지 삽입 코드 안내 페이지. 발급은 운영자가 연락해오면 관리자가 직접 전달한다.
+// (배지 이미지 자체인 /badge/[slug].svg 는 이미 설치된 곳에서 계속 불러가야 하므로
+//  공개로 둔다 — 그쪽은 ownership_verified 로 이미 걸러진다)
+const isAdmin = await isValidSessionCookieValue(
+  env.ADMIN_PASSWORD,
+  Astro.cookies.get(ADMIN_COOKIE_NAME)?.value
+);
+
 const { slug } = Astro.params;
-const site = slug ? await getSiteBySlug(env.DB, slug) : null;
+const site = isAdmin && slug ? await getSiteBySlug(env.DB, slug) : null;
 
 if (!site || site.status !== 'approved') {
   return renderNotFound(Astro);
