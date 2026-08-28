@@ -3,7 +3,7 @@ import '../styles/global.css';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import CookieConsent from '../components/CookieConsent.astro';
-import { SITE_NAME, SITE_URL, GA_MEASUREMENT_ID } from '../lib/site';
+import { SITE_NAME, SITE_URL, GA_MEASUREMENT_ID, ADSENSE_CLIENT_ID } from '../lib/site';
 
 interface Props {
   title: string;
@@ -126,6 +126,29 @@ const ogImageUrl = new URL(image || '/og-image.png', SITE_URL).toString();
         });
       };
     </script>
+
+    {/*
+      AdSense 는 GA 와 달리 동의 전에도 스크립트를 로드한다. 이유가 둘 있다.
+
+      하나, 심사가 진행되려면 코드가 실제로 실행돼야 한다. 동의 전에 막아두면
+      심사자와 크롤러에게는 코드가 없는 사이트로 보인다.
+
+      둘, 위 Consent Mode 기본값이 ad_storage/ad_user_data/ad_personalization 을
+      전부 denied 로 선언해뒀기 때문에, 동의 전에는 쿠키 없이 비맞춤형 광고만
+      나간다. 광고를 아예 막는 것과 달리 이쪽은 수익을 유지하면서도 동의 전
+      추적을 하지 않는다 — Google 이 CMP 연동에 권장하는 방식이다.
+
+      noindex 페이지에는 넣지 않는다. 404·검색결과·관리자 화면처럼 게시자 콘텐츠가
+      없는 페이지에 광고를 붙이는 것은 AdSense 정책 위반이다.
+    */}
+    {!noindex && (
+      <script
+        async
+        is:inline
+        src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT_ID}`}
+        crossorigin="anonymous"
+      ></script>
+    )}
   </head>
   <body class="min-h-screen flex flex-col bg-slate-50 text-slate-900">
     <Header />

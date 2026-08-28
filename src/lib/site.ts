@@ -16,3 +16,6 @@ export const GA_MEASUREMENT_ID = 'G-2G6NNJJCFZ';
 
 /** 동의 여부를 저장하는 localStorage 키. 값은 'granted' | 'denied'. */
 export const CONSENT_STORAGE_KEY = 'siteda_cookie_consent';
+
+/** Google AdSense 게시자 ID. ads.txt 와 값이 어긋나면 광고가 나가지 않는다. */
+export const ADSENSE_CLIENT_ID = 'ca-pub-3618308526218183';
