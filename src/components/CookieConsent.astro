@@ -1,0 +1,86 @@
+---
+import { CONSENT_STORAGE_KEY } from '../lib/site';
+---
+
+{/*
+  기본값은 '거부'다. 이용자가 동의하기 전까지 gtag.js 를 아예 내려받지 않으므로
+  Google 로 나가는 요청 자체가 없다. 동의하면 그때 스크립트를 주입하고
+  Consent Mode 를 granted 로 갱신한다. (Layout.astro 의 head 스니펫과 한 쌍)
+*/}
+<div
+  data-cookie-banner
+  hidden
+  role="dialog"
+  aria-live="polite"
+  aria-label="쿠키 사용 안내"
+  class="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 backdrop-blur"
+>
+  <div class="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+    <p class="text-sm leading-relaxed text-slate-600">
+      이 사이트는 방문 통계 분석을 위해 쿠키를 사용합니다. 동의하지 않으셔도 모든 기능을 그대로 이용하실 수 있습니다.{' '}
+      <a href="/privacy" class="underline underline-offset-2 hover:text-slate-900">개인정보처리방침</a>
+    </p>
+    <div class="flex shrink-0 gap-2">
+      <button
+        type="button"
+        data-cookie-deny
+        class="flex-1 whitespace-nowrap rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-400 hover:text-slate-900 sm:flex-none"
+      >
+        동의하지 않음
+      </button>
+      <button
+        type="button"
+        data-cookie-accept
+        class="flex-1 whitespace-nowrap rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 sm:flex-none"
+      >
+        동의
+      </button>
+    </div>
+  </div>
+</div>
+
+<script is:inline define:vars={{ CONSENT_STORAGE_KEY }}>
+  (function () {
+    const banner = document.querySelector('[data-cookie-banner]');
+    if (!banner) return;
+
+    function read() {
+      try {
+        return localStorage.getItem(CONSENT_STORAGE_KEY);
+      } catch {
+        // 시크릿 모드 등에서 localStorage 접근이 막히면 저장을 포기하고
+        // '아직 선택 안 함'으로 취급한다 — 거부 쪽이 안전한 기본값이다.
+        return null;
+      }
+    }
+
+    function write(value) {
+      try {
+        localStorage.setItem(CONSENT_STORAGE_KEY, value);
+      } catch {
+        // 저장 실패해도 이번 방문 동안의 선택은 아래에서 그대로 반영된다.
+      }
+    }
+
+    function decide(value) {
+      write(value);
+      banner.hidden = true;
+      if (value === 'granted') window.sitedaGrantConsent();
+      else window.sitedaRevokeConsent();
+    }
+
+    document.querySelector('[data-cookie-accept]')?.addEventListener('click', () => decide('granted'));
+    document.querySelector('[data-cookie-deny]')?.addEventListener('click', () => decide('denied'));
+
+    // 푸터의 "쿠키 설정" — 이미 내린 결정을 다시 열어 바꿀 수 있어야 한다.
+    document.querySelectorAll('[data-cookie-settings]').forEach((el) => {
+      el.addEventListener('click', () => {
+        banner.hidden = false;
+      });
+    });
+
+    const stored = read();
+    if (stored === 'granted') window.sitedaGrantConsent();
+    else if (stored !== 'denied') banner.hidden = false;
+  })();
+</script>

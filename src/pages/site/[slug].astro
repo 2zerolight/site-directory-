@@ -250,8 +250,23 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
       <span class={`rounded-full px-2.5 py-1 ${site.is_https ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
         {site.is_https ? 'HTTPS 보안 연결' : 'HTTPS 미확인'}
       </span>
-      <span class={`rounded-full px-2.5 py-1 ${site.ownership_verified ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
-        {site.ownership_verified ? '소유권 인증됨' : '소유권 미인증'}
+      {/*
+        '소유권 인증됨' 은 메타태그/DNS 로 도메인 통제를 실제 검증한 경우에만 쓴다.
+        관리자가 눈으로 확인만 한 건은 근거가 다르므로 '운영자 확인됨' 으로 구분한다.
+      */}
+      <span
+        title={site.ownership_verified
+          ? site.verified_by_admin
+            ? '운영자 정보를 관리자가 확인했습니다. 도메인 소유권 검증은 거치지 않았습니다.'
+            : '메타태그 또는 DNS TXT 레코드로 도메인 소유권을 검증했습니다.'
+          : '도메인 소유권이 아직 검증되지 않았습니다.'}
+        class={`rounded-full px-2.5 py-1 ${site.ownership_verified ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}
+      >
+        {site.ownership_verified
+          ? site.verified_by_admin
+            ? '운영자 확인됨'
+            : '소유권 인증됨'
+          : '소유권 미인증'}
       </span>
     </div>
 
