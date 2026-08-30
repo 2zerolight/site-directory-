@@ -15,6 +15,13 @@ if (!tag) {
   return renderNotFound(Astro);
 }
 
+// 승인된 사이트가 하나도 없는 태그는 목록이 아니라 빈 페이지다. 거절·삭제된 사이트에
+// 붙어 있던 태그가 이렇게 남는다(캐스퍼차고 중복 등록 건에서 6개 발견). 사이트맵에는
+// 안 실리지만 주소로는 열려서 "0개"짜리 색인 대상이 되므로 404 로 끊는다.
+if (total === 0) {
+  return renderNotFound(Astro);
+}
+
 const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
 // self-canonical 로 바꾼 뒤로 ?page=99 같은 범위 밖 페이지까지 자기 자신을 canonical 로
