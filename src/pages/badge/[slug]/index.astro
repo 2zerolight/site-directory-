@@ -16,18 +16,27 @@ import {
   type BadgeTheme,
 } from '../../../lib/badge';
 
-// 배지 삽입 코드 안내 페이지. 발급은 운영자가 연락해오면 관리자가 직접 전달한다.
-// (배지 이미지 자체인 /badge/[slug].svg 는 이미 설치된 곳에서 계속 불러가야 하므로
-//  공개로 둔다 — 그쪽은 ownership_verified 로 이미 걸러진다)
+// 배지 삽입 코드 안내 페이지.
+//
+// 인증을 마친 사이트에는 공개한다 — 소유권 인증이 셀프 서비스로 돌아왔으므로 인증
+// 직후 배지 코드까지 스스로 가져갈 수 있어야 흐름이 끊기지 않는다. 이 페이지는 읽기
+// 전용이고 서버가 외부를 fetch 하지도 않아서 열어도 남는 위험이 없다.
+//
+// 미인증 사이트는 그대로 404 다. 관리자는 인증 여부와 무관하게 볼 수 있다(발급 문의를
+// 대신 처리해야 하므로).
 const isAdmin = await isValidSessionCookieValue(
   env.ADMIN_PASSWORD,
   Astro.cookies.get(ADMIN_COOKIE_NAME)?.value
 );
 
 const { slug } = Astro.params;
-const site = isAdmin && slug ? await getSiteBySlug(env.DB, slug) : null;
+const site = slug ? await getSiteBySlug(env.DB, slug) : null;
 
 if (!site || site.status !== 'approved') {
+  return renderNotFound(Astro);
+}
+
+if (site.ownership_verified !== 1 && !isAdmin) {
   return renderNotFound(Astro);
 }
 

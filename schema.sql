@@ -63,6 +63,14 @@ CREATE TABLE sites (
   is_https INTEGER,
   ownership_verified INTEGER NOT NULL DEFAULT 0,
   verification_token TEXT,
+  -- 인증 페이지 주소를 잡는 값. slug 는 sitemap 에 전부 실려 있어 공개나 마찬가지라
+  -- 그걸로 주소를 잡으면 누구나 남의 인증 페이지를 열고 서버에 제3자 fetch 를 시킬 수
+  -- 있다. 그래서 추측 불가능한 별도 시크릿으로 주소를 잡는다 (verification_token 과
+  -- 역할이 다르다 — 토큰은 상대 도메인에 올리는 값, 시크릿은 이 페이지의 열쇠).
+  verification_secret TEXT UNIQUE,
+  -- 인증 확인 버튼의 쿨다운 기준. 대상 사이트를 fetch 하는 동작이라 제한이 없으면
+  -- 등록된 사이트를 향한 반복 요청 도구가 된다.
+  last_verify_attempt_at TEXT,
   verification_method TEXT CHECK (verification_method IN ('meta_tag', 'dns_txt') OR verification_method IS NULL),
   third_party_submission INTEGER NOT NULL DEFAULT 0,
   verified_by_admin INTEGER NOT NULL DEFAULT 0,

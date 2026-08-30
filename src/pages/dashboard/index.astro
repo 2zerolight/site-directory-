@@ -11,6 +11,7 @@ import {
   getAllSubcategories,
   getSitesForAdmin,
   getSiteById,
+  deleteSite,
   setSiteTags,
   bulkMoveCategory,
   type AdminSiteStatusFilter,
@@ -89,6 +90,19 @@ if (Astro.request.method === 'POST') {
         if (ids.length > 0 && categoryId) {
           await bulkMoveCategory(env.DB, ids, categoryId);
         }
+        return Astro.redirect(backTo);
+      }
+
+      if (id && action === 'delete') {
+        // 삭제는 되돌릴 수 없다. 실수로 한 번 누르는 걸 막기 위해 사이트 이름을
+        // 그대로 입력했을 때만 진행한다 (거절은 status 만 바꾸므로 이 관문이 없다).
+        const site = await getSiteById(env.DB, id);
+        const typed = String(data.get('confirmName') ?? '').trim();
+        if (!site || typed !== site.name) {
+          const sep = redirectTo.includes('?') ? '&' : '?';
+          return Astro.redirect(`${backTo}${sep}error=delete#site-${id}`);
+        }
+        await deleteSite(env.DB, id);
         return Astro.redirect(backTo);
       }
 
@@ -181,6 +195,7 @@ const singleSiteId = Number(Astro.url.searchParams.get('site') || '');
 const categories = isAuthed ? await getCategories(env.DB) : [];
 const subcategories = isAuthed ? await getAllSubcategories(env.DB) : [];
 const updateFailed = Astro.url.searchParams.get('error') === 'update';
+const deleteFailed = Astro.url.searchParams.get('error') === 'delete';
 
 const singleSite = isAuthed && singleSiteId ? await getSiteById(env.DB, singleSiteId) : null;
 const listResult =
@@ -230,6 +245,12 @@ const tabs: { value: AdminSiteStatusFilter; label: string }[] = [
       {updateFailed && (
         <div class="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           수정 내용을 저장하지 못했습니다. 필수 항목(이름·URL·한 줄 소개·상세 설명·대분류)과 URL 형식을 확인해주세요.
+        </div>
+      )}
+
+      {deleteFailed && (
+        <div class="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          삭제하지 않았습니다. 확인란에 사이트 이름을 정확히 입력해야 삭제됩니다.
         </div>
       )}
 

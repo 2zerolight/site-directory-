@@ -59,6 +59,8 @@ export interface Site {
   is_https: number | null;
   ownership_verified: number;
   verification_token: string | null;
+  verification_secret: string | null;
+  last_verify_attempt_at: string | null;
   verification_method: VerificationMethod;
   third_party_submission: number;
   verified_by_admin: number;

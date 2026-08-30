@@ -246,6 +246,39 @@ export async function getComparableSites(
   return results;
 }
 
+/**
+ * 인증 페이지는 오직 시크릿으로만 열린다. slug 로는 못 찾는다 — slug 는 공개 정보라
+ * 그걸로 열 수 있으면 열거가 가능해지고, 그게 이 흐름을 닫았던 이유다.
+ */
+export async function getSiteByVerificationSecret(
+  db: D1Database,
+  secret: string
+): Promise<SiteWithCategory | null> {
+  return db
+    .prepare(`SELECT ${SITE_WITH_CATEGORY_SELECT} ${SITE_WITH_CATEGORY_JOIN} WHERE s.verification_secret = ?`)
+    .bind(secret)
+    .first<SiteWithCategory>();
+}
+
+/** 확인 버튼을 누른 시각을 남긴다. 실제 fetch 전에 찍어야 연타가 다 통과하지 않는다. */
+export async function touchVerifyAttempt(db: D1Database, id: number): Promise<void> {
+  await db
+    .prepare(`UPDATE sites SET last_verify_attempt_at = datetime('now') WHERE id = ?`)
+    .bind(id)
+    .run();
+}
+
+/**
+ * 사이트를 영구 삭제한다. 거절(status='rejected')과 달리 되돌릴 수 없다.
+ *
+ * site_tags·reviews 는 ON DELETE CASCADE 로 같이 지워진다. review_audit_log 는
+ * 일부러 FK 를 걸지 않았으므로 남는다 — 신고나 분쟁 대응 기록은 콘텐츠보다 오래
+ * 살아야 한다(schema.sql 주석 참고).
+ */
+export async function deleteSite(db: D1Database, id: number): Promise<void> {
+  await db.prepare('DELETE FROM sites WHERE id = ?').bind(id).run();
+}
+
 export async function searchSites(db: D1Database, query: string, limit = 30): Promise<SiteWithCategory[]> {
   const like = `%${query}%`;
   const { results } = await db
@@ -385,6 +418,7 @@ export interface SiteSubmissionInput {
   facebookUrl: string | null;
   otherSnsUrl: string | null;
   verificationToken: string;
+  verificationSecret: string;
   submittedEmail: string | null;
   thirdPartySubmission: boolean;
 }
@@ -398,8 +432,8 @@ export async function insertSiteSubmission(db: D1Database, data: SiteSubmissionI
         main_keywords, service_keywords,
         operator_name, business_name, service_region, customer_center, contact_email,
         blog_url, youtube_url, instagram_url, facebook_url, other_sns_url,
-        verification_token, status, submitted_email, third_party_submission
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+        verification_token, verification_secret, status, submitted_email, third_party_submission
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
     )
     .bind(
       data.slug,
@@ -427,6 +461,7 @@ export async function insertSiteSubmission(db: D1Database, data: SiteSubmissionI
       data.facebookUrl,
       data.otherSnsUrl,
       data.verificationToken,
+      data.verificationSecret,
       data.submittedEmail,
       data.thirdPartySubmission ? 1 : 0
     )
