@@ -218,23 +218,8 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
     </a>
   )}
 
-  {/*
-    object-cover 였는데 object-contain 으로 바꾼다. 등록되는 이미지는 대부분 사이트가
-    SNS 공유용으로 만든 1200x630 규격이라 그 안에 글자가 들어 있고, 높이를 깎으면
-    하필 그 글자가 잘려나간다.
-
-    비율 고정 컨테이너로 자리를 미리 잡는 방법도 시도했지만 되돌렸다. 여기 들어오는
-    건 우리가 통제하지 못하는 외부 이미지 URL 이라 핫링크 차단 등으로 로드에 실패하는
-    일이 흔한데, 그때 페이지 최상단에 거대한 빈 상자만 남아 본문을 밀어낸다.
-    지금처럼 두면 실패한 이미지는 그냥 접힌다.
-  */}
   {site.cover_image_url && (
-    <img
-      src={site.cover_image_url}
-      alt={`${site.name} 대표 이미지`}
-      class="w-full max-h-72 object-contain rounded-lg border border-slate-200 mb-6"
-      loading="lazy"
-    />
+    <img src={site.cover_image_url} alt={`${site.name} 대표 이미지`} class="w-full max-h-72 object-cover rounded-lg border border-slate-200 mb-6" loading="lazy" />
   )}
 
   <div class="rounded-lg border border-slate-200 bg-white p-5 sm:p-6 md:p-8">
