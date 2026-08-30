@@ -197,6 +197,55 @@ export async function getRelatedSites(
   return results;
 }
 
+/**
+ * 비교표에 올릴 "가장 비슷한" 사이트들.
+ *
+ * getRelatedSites 는 같은 카테고리에서 최신순으로 뽑기 때문에 비교 대상으로는 못 쓴다
+ * (여행 카테고리의 캠핑용품점 옆에 최근 등록된 길찾기 앱이 붙는 식). 비교표는 "얘랑
+ * 쟤가 뭐가 다른가"에 답해야 하므로 아래 조건 중 최소 하나는 걸려야 후보로 인정한다.
+ *
+ *   - 같은 소분류
+ *   - 태그를 하나 이상 공유
+ *   - 같은 사이트 유형(쇼핑몰/공공기관 …)
+ *
+ * 조회수 같은 인기 신호는 정렬 tiebreaker 로만 쓴다. 인기 순으로 아무거나 채우면
+ * 표가 "비슷한 사이트"가 아니라 "같은 카테고리 인기 사이트"가 되고, 그건 이미 아래
+ * '같은 카테고리의 다른 사이트' 블록이 하고 있다.
+ *
+ * service_keywords 가 비어 있으면 표에 채울 내용이 없으므로 애초에 제외한다.
+ */
+export async function getComparableSites(
+  db: D1Database,
+  site: Pick<Site, 'id' | 'category_id' | 'subcategory_id' | 'site_type' | 'region'>,
+  limit = 4
+): Promise<SiteWithCategory[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM (
+         SELECT ${SITE_WITH_CATEGORY_SELECT},
+           (?2 IS NOT NULL AND s.subcategory_id = ?2) AS same_subcategory,
+           (?3 IS NOT NULL AND s.site_type = ?3) AS same_type,
+           (?4 IS NOT NULL AND s.region = ?4) AS same_region,
+           (SELECT COUNT(*)
+              FROM site_tags mine
+              JOIN site_tags theirs ON theirs.tag_id = mine.tag_id
+             WHERE mine.site_id = ?1 AND theirs.site_id = s.id) AS shared_tags
+         ${SITE_WITH_CATEGORY_JOIN}
+         WHERE s.category_id = ?5
+           AND s.status = 'approved'
+           AND s.id != ?1
+           AND COALESCE(s.service_keywords, '') != ''
+       )
+       WHERE same_subcategory OR shared_tags > 0 OR same_type
+       ORDER BY same_subcategory DESC, shared_tags DESC, same_type DESC, same_region DESC,
+                view_count DESC, id ASC
+       LIMIT ?6`
+    )
+    .bind(site.id, site.subcategory_id, site.site_type, site.region, site.category_id, limit)
+    .all<SiteWithCategory>();
+  return results;
+}
+
 export async function searchSites(db: D1Database, query: string, limit = 30): Promise<SiteWithCategory[]> {
   const like = `%${query}%`;
   const { results } = await db

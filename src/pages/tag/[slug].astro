@@ -5,6 +5,7 @@ import SiteCard from '../../components/SiteCard.astro';
 import { getApprovedSitesByTag, PAGE_SIZE } from '../../lib/db';
 import { SITE_URL } from '../../lib/site';
 import { renderNotFound } from '../../lib/not-found';
+import { buildListDescription } from '../../lib/seo';
 
 const { slug } = Astro.params;
 const page = Math.max(1, Number(Astro.url.searchParams.get('page') ?? '1') || 1);
@@ -15,13 +16,29 @@ if (!tag) {
 }
 
 const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-const description = `#${tag.name} 태그가 붙은 국내 웹사이트 모음`;
+
+// self-canonical 로 바꾼 뒤로 ?page=99 같은 범위 밖 페이지까지 자기 자신을 canonical 로
+// 선언하는 색인 대상이 됐다. 내용은 비어 있으므로 그대로 두면 목록마다 무한히 많은 빈
+// URL 이 색인 후보로 노출된다. 범위를 벗어나면 404 로 끊는다.
+if (page > totalPages) {
+  return renderNotFound(Astro);
+}
+
+// 카테고리 페이지와 같은 이유 — 2페이지 이상은 self-canonical 이므로 제목/설명이
+// 1페이지와 겹치면 중복 제목으로 잡힌다.
+const canonicalPath = page > 1 ? `/tag/${tag.slug}?page=${page}` : `/tag/${tag.slug}`;
+const pageSuffix = page > 1 ? ` (${page}페이지)` : '';
+const intro = `#${tag.name} 태그가 붙은 국내 웹사이트 모음`;
+const description = buildListDescription(
+  `#${tag.name} 태그가 붙은 국내 웹사이트 ${total}개${pageSuffix}`,
+  sites.map((site) => site.name)
+);
 
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'ItemList',
-  name: `#${tag.name} 사이트 목록`,
-  url: new URL(`/tag/${tag.slug}`, SITE_URL).toString(),
+  name: `#${tag.name} 사이트 목록${pageSuffix}`,
+  url: new URL(canonicalPath, SITE_URL).toString(),
   itemListElement: sites.map((site, index) => ({
     '@type': 'ListItem',
     position: (page - 1) * PAGE_SIZE + index + 1,
@@ -31,13 +48,13 @@ const jsonLd = {
 };
 ---
 
-<Layout title={`#${tag.name}`} description={description} canonicalPath={page > 1 ? `/tag/${tag.slug}?page=${page}` : `/tag/${tag.slug}`} jsonLd={jsonLd}>
+<Layout title={`#${tag.name}${pageSuffix}`} description={description} canonicalPath={canonicalPath} jsonLd={jsonLd}>
   <nav class="text-sm text-slate-400 mb-4">
     <a href="/" class="hover:text-slate-600">홈</a> <span class="mx-1">/</span> #{tag.name}
   </nav>
 
   <h1 class="text-2xl font-bold text-slate-900">#{tag.name}</h1>
-  <p class="mt-2 text-slate-500">{description}</p>
+  <p class="mt-2 text-slate-500">{intro}</p>
   <p class="mt-1 text-sm text-slate-400">{total}개 사이트</p>
 
   {sites.length === 0 ? (

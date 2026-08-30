@@ -5,6 +5,7 @@ import SiteCard from '../../components/SiteCard.astro';
 import {
   getSiteBySlug,
   getRelatedSites,
+  getComparableSites,
   getTagsForSite,
   getApprovedReviewsForSite,
   getReviewStats,
@@ -14,6 +15,7 @@ import { SITE_URL, CONTACT_EMAIL } from '../../lib/site';
 import { decodeHostnameForDisplay } from '../../lib/urls';
 import { ADMIN_COOKIE_NAME, isValidSessionCookieValue } from '../../lib/auth';
 import { renderNotFound } from '../../lib/not-found';
+import { josa } from '../../lib/seo';
 
 const { slug } = Astro.params;
 const site = slug ? await getSiteBySlug(env.DB, slug) : null;
@@ -67,8 +69,9 @@ if (Astro.request.method === 'POST' && isApproved) {
   }
 }
 
-const [relatedSites, tags, reviews, reviewStats] = await Promise.all([
+const [relatedSites, comparableSites, tags, reviews, reviewStats] = await Promise.all([
   getRelatedSites(env.DB, site.category_id, site.id, 6),
+  getComparableSites(env.DB, site, 4),
   getTagsForSite(env.DB, site.id),
   getApprovedReviewsForSite(env.DB, site.id),
   getReviewStats(env.DB, site.id),
@@ -84,6 +87,29 @@ const toChips = (raw: string | null) =>
 
 const serviceChips = toChips(site.service_keywords);
 const keywordChips = toChips(site.main_keywords);
+
+/*
+  "비슷한 사이트와 뭐가 다른가" 비교표.
+
+  디렉토리 상세 페이지가 원본 사이트를 이길 수 있는 거의 유일한 지점이다. 원본은
+  자기 얘기만 하지 경쟁 서비스와 자기를 나란히 놓지 않는다. 표에 들어가는 값은 전부
+  DB 에 저장된 사실(하는 일·유형·서비스 지역)이고 우열 판단은 넣지 않는다 — 없는
+  정보를 지어내면 그 순간 이 페이지는 원본보다 나쁜 페이지가 된다.
+
+  비교 대상이 2곳 미만이면 표가 성립하지 않으므로 블록 자체를 렌더링하지 않는다.
+*/
+const comparisonRows = [site, ...comparableSites]
+  .map((row) => ({
+    slug: row.slug,
+    name: row.name,
+    isSelf: row.id === site.id,
+    services: toChips(row.service_keywords),
+    siteType: row.site_type,
+    serviceRegion: row.service_region || row.region,
+  }))
+  .filter((row) => row.services.length > 0);
+
+const showComparison = comparisonRows.length >= 3 && comparisonRows[0]?.isSelf === true;
 
 const formatDate = (value: string | null) =>
   value ? new Date(value.replace(' ', 'T') + 'Z').toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }) : null;
@@ -428,6 +454,52 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
       </div>
     )}
   </div>
+
+  {showComparison && (
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-slate-900">
+        {site.name}{josa(site.name, '과', '와')} 비슷한 사이트, 뭐가 다른가
+      </h2>
+      <p class="mt-1 text-sm text-slate-500">
+        {site.category_name} 분야에서 {site.name}{josa(site.name, '과', '와')} 가장 가까운
+        {comparisonRows.length - 1}곳을 나란히 놓고 각각 무엇을 하는 곳인지 비교했습니다.
+      </p>
+
+      <div class="mt-4 overflow-x-auto">
+        <table class="w-full min-w-[36rem] border-collapse text-left text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400">
+              <th scope="col" class="py-2 pr-4 font-medium">사이트</th>
+              <th scope="col" class="py-2 pr-4 font-medium">하는 일</th>
+              <th scope="col" class="py-2 pr-4 font-medium">유형</th>
+              <th scope="col" class="py-2 font-medium">서비스 지역</th>
+            </tr>
+          </thead>
+          <tbody>
+            {comparisonRows.map((row) => (
+              <tr class={`border-b border-slate-100 align-top ${row.isSelf ? 'bg-slate-50' : ''}`}>
+                <th scope="row" class="py-3 pr-4 font-medium text-slate-900">
+                  {row.isSelf ? (
+                    <span>{row.name} <span class="ml-1 text-xs font-normal text-slate-400">(이 페이지)</span></span>
+                  ) : (
+                    <a href={`/site/${row.slug}`} class="hover:underline">{row.name}</a>
+                  )}
+                </th>
+                <td class="py-3 pr-4 text-slate-700">{row.services.join(', ')}</td>
+                <td class="py-3 pr-4 text-slate-500">{row.siteType ?? '—'}</td>
+                <td class="py-3 text-slate-500">{row.serviceRegion ?? '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p class="mt-3 text-xs text-slate-400">
+        표의 값은 사이트다에 등록된 정보를 그대로 옮긴 것입니다. 우열을 매기지 않으며,
+        각 서비스의 최신 내용은 해당 사이트에서 확인하세요.
+      </p>
+    </section>
+  )}
 
   {relatedSites.length > 0 && (
     <section class="mt-10">

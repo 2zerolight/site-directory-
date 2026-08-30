@@ -2,6 +2,16 @@ export const SITE_NAME = '사이트다';
 export const SITE_DESCRIPTION = '분야별로 국내 웹사이트를 검색하고 발견하는 디렉토리 플랫폼';
 export const SITE_URL = 'https://siteda.kr';
 
+/**
+ * Organization JSON-LD 의 sameAs 에 들어가는 공식 채널 주소.
+ *
+ * "사이트다"라는 이름은 siteda.co.kr 이 이미 쓰고 있어서 브랜드 검색어가 겹친다.
+ * sameAs 는 구글에 "이 개체는 저 개체와 다르다"고 알려주는 가장 직접적인 신호이므로,
+ * 운영 SNS/블로그가 생기는 대로 여기에 넣어야 한다. 비어 있으면 sameAs 키 자체를
+ * 내보내지 않는다(빈 배열을 내보내면 신호가 아니라 잡음이다).
+ */
+export const SITE_SAME_AS: string[] = [];
+
 /** 문의·삭제 요청·소유권 인증 요청·개인정보 관련 연락을 받는 공개 주소. */
 export const CONTACT_EMAIL = 'contact@siteda.kr';
 
