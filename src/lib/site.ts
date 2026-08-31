@@ -21,6 +21,13 @@ export const SITE_SAME_AS: string[] = [];
  */
 export const NAVER_SITE_VERIFICATION = '13d65b547c16e4865677331538a7b293579ac40f';
 
+/**
+ * 빙 웹마스터 도구 사이트 확인 값. 네이버 것과 같은 이유로 Layout 에 둔다.
+ *
+ * 빙 색인은 검색 트래픽 자체보다 ChatGPT·Copilot 이 인용할 근거가 된다는 쪽이 더 크다.
+ */
+export const BING_SITE_VERIFICATION = 'C45E5E99BEA7A542E07065135C5F1E09';
+
 /** 문의·삭제 요청·소유권 인증 요청·개인정보 관련 연락을 받는 공개 주소. */
 export const CONTACT_EMAIL = 'contact@siteda.kr';
 

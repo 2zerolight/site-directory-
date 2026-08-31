@@ -3,7 +3,7 @@ import '../styles/global.css';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import CookieConsent from '../components/CookieConsent.astro';
-import { SITE_NAME, SITE_URL, GA_MEASUREMENT_ID, ADSENSE_CLIENT_ID, NAVER_SITE_VERIFICATION } from '../lib/site';
+import { SITE_NAME, SITE_URL, GA_MEASUREMENT_ID, ADSENSE_CLIENT_ID, NAVER_SITE_VERIFICATION, BING_SITE_VERIFICATION } from '../lib/site';
 
 interface Props {
   title: string;
@@ -34,6 +34,7 @@ const ogImageUrl = new URL(image || '/og-image.png', SITE_URL).toString();
     {NAVER_SITE_VERIFICATION && (
       <meta name="naver-site-verification" content={NAVER_SITE_VERIFICATION} />
     )}
+    {BING_SITE_VERIFICATION && <meta name="msvalidate.01" content={BING_SITE_VERIFICATION} />}
 
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
