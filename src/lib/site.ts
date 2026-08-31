@@ -12,6 +12,15 @@ export const SITE_URL = 'https://siteda.kr';
  */
 export const SITE_SAME_AS: string[] = [];
 
+/**
+ * 네이버 서치어드바이저 사이트 확인 값.
+ *
+ * 네이버는 홈에서만 확인하지만 태그는 Layout 에 두어 모든 페이지에 나간다 —
+ * 홈에만 넣으면 레이아웃을 손볼 때 조용히 사라져도 알아채지 못한다.
+ * 값이 비면 태그 자체를 내보내지 않는다.
+ */
+export const NAVER_SITE_VERIFICATION = '13d65b547c16e4865677331538a7b293579ac40f';
+
 /** 문의·삭제 요청·소유권 인증 요청·개인정보 관련 연락을 받는 공개 주소. */
 export const CONTACT_EMAIL = 'contact@siteda.kr';
 
