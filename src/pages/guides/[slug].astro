@@ -1,0 +1,139 @@
+---
+import { env } from 'cloudflare:workers';
+import { getCollection, render } from 'astro:content';
+import Layout from '../../layouts/Layout.astro';
+import SiteCard from '../../components/SiteCard.astro';
+import { getCategoryBySlug, getApprovedSitesByCategory } from '../../lib/db';
+import { SITE_URL, SITE_NAME } from '../../lib/site';
+import { renderNotFound } from '../../lib/not-found';
+
+const { slug } = Astro.params;
+const guides = await getCollection('guides', ({ data }) => !data.draft);
+const guide = guides.find((g) => g.id === slug);
+
+if (!guide) {
+  return renderNotFound(Astro);
+}
+
+const { Content } = await render(guide);
+
+// 글이 다루는 카테고리로 양방향 링크를 만든다. 글만 색인되고 목록으로 이어지지 않으면
+// 이 글을 쓰는 의미가 절반은 사라진다.
+const category = await getCategoryBySlug(env.DB, guide.data.category);
+const related = category
+  ? (await getApprovedSitesByCategory(env.DB, category.id, 1)).sites.slice(0, 6)
+  : [];
+
+const formatDate = (d: Date) =>
+  d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+
+const url = new URL(`/guides/${guide.id}`, SITE_URL).toString();
+
+const articleJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Article',
+  headline: guide.data.title,
+  description: guide.data.description,
+  url,
+  mainEntityOfPage: url,
+  datePublished: guide.data.publishDate.toISOString(),
+  ...(guide.data.updatedDate ? { dateModified: guide.data.updatedDate.toISOString() } : {}),
+  inLanguage: 'ko',
+  publisher: { '@id': `${SITE_URL}/#organization` },
+  author: { '@type': 'Organization', name: SITE_NAME, url: SITE_URL },
+};
+
+const breadcrumbJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: '홈', item: SITE_URL },
+    { '@type': 'ListItem', position: 2, name: '가이드', item: new URL('/guides', SITE_URL).toString() },
+    { '@type': 'ListItem', position: 3, name: guide.data.title, item: url },
+  ],
+};
+---
+
+<Layout
+  title={guide.data.title}
+  description={guide.data.description}
+  canonicalPath={`/guides/${guide.id}`}
+  jsonLd={[articleJsonLd, breadcrumbJsonLd]}
+>
+  <nav class="text-sm text-slate-400 mb-4">
+    <a href="/" class="hover:text-slate-600">홈</a> <span class="mx-1">/</span>
+    <a href="/guides" class="hover:text-slate-600">가이드</a> <span class="mx-1">/</span> {guide.data.title}
+  </nav>
+
+  <article class="mx-auto max-w-3xl">
+    <h1 class="text-2xl sm:text-3xl font-bold text-slate-900 leading-snug">{guide.data.title}</h1>
+    <p class="mt-3 text-slate-600">{guide.data.lead}</p>
+    <p class="mt-3 text-xs text-slate-400">
+      {formatDate(guide.data.publishDate)}
+      {guide.data.updatedDate && ` · ${formatDate(guide.data.updatedDate)} 갱신`}
+    </p>
+
+    <div class="guide-body mt-8">
+      <Content />
+    </div>
+  </article>
+
+  {category && related.length > 0 && (
+    <section class="mx-auto max-w-3xl mt-12 border-t border-slate-200 pt-8">
+      <h2 class="text-lg font-semibold text-slate-900">
+        {category.name} 분야에 등록된 사이트
+      </h2>
+      <p class="mt-1 text-sm text-slate-500">
+        이 글에서 다룬 분야입니다. <a href={`/category/${category.slug}`} class="underline hover:text-slate-700">전체 목록 보기 →</a>
+      </p>
+      <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {related.map((site) => <SiteCard site={site} showCategory={false} />)}
+      </div>
+    </section>
+  )}
+</Layout>
+
+<style is:global>
+  /* 마크다운 본문은 Tailwind 클래스를 붙일 수 없으므로 여기서 한 번만 정의한다. */
+  .guide-body { color: #334155; line-height: 1.85; }
+  .guide-body h2 {
+    margin: 2.5rem 0 0.75rem;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #0f172a;
+    padding-left: 0.7rem;
+    border-left: 4px solid #0f172a;
+  }
+  .guide-body p { margin-bottom: 1rem; }
+  .guide-body ul { margin: 0 0 1.25rem 1.1rem; list-style: disc; }
+  .guide-body li { margin-bottom: 0.4rem; }
+  .guide-body strong { color: #0f172a; font-weight: 600; }
+  .guide-body em { font-style: normal; background: #fef9c3; padding: 0 0.15em; }
+  .guide-body a { color: #0f172a; text-decoration: underline; }
+  .guide-body blockquote {
+    margin: 1.5rem 0;
+    padding: 0.9rem 1.1rem;
+    border-left: 3px solid #cbd5e1;
+    background: #f8fafc;
+    font-size: 0.9rem;
+    color: #475569;
+  }
+  .guide-body blockquote p:last-child { margin-bottom: 0; }
+  /* 표는 좁은 화면에서 페이지를 밀지 않고 자기 안에서 스크롤되어야 한다. */
+  .guide-body table {
+    display: block;
+    overflow-x: auto;
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.25rem 0;
+    font-size: 0.9rem;
+    white-space: nowrap;
+  }
+  .guide-body th, .guide-body td {
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  .guide-body th { background: #f8fafc; font-weight: 600; color: #0f172a; }
+</style>

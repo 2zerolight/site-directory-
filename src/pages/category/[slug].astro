@@ -12,6 +12,7 @@ import {
 import { SITE_URL } from '../../lib/site';
 import { renderNotFound } from '../../lib/not-found';
 import { buildListDescription } from '../../lib/seo';
+import { getCollection } from 'astro:content';
 
 // 2026-08-17 taxonomy revamp: redirect old category slugs that changed name.
 const OLD_CATEGORY_SLUG_REDIRECTS: Record<string, string> = {
@@ -82,6 +83,11 @@ const canonicalPath =
 // meta description 은 스니펫 길이에 맞춰 따로 만든다 (lib/seo.ts 참고).
 const intro = category.description || `${category.name} 분야의 국내 웹사이트 모음`;
 
+// 이 분야를 다룬 가이드가 있으면 걸어준다. 글에서 목록으로만 링크가 가고 반대가 없으면
+// 글은 고아가 되고 목록은 문맥을 못 얻는다.
+const categoryGuides = (await getCollection('guides', ({ data }) => !data.draft && data.category === category.slug))
+  .sort((a, b) => b.data.publishDate.getTime() - a.data.publishDate.getTime());
+
 // 2페이지 이상은 self-canonical 이라 그 자체로 색인 대상이다. 제목과 설명이 1페이지와
 // 똑같으면 중복 제목으로 잡히므로 페이지 번호를 노출한다.
 const pageSuffix = page > 1 ? ` (${page}페이지)` : '';
@@ -130,6 +136,21 @@ const jsonLd = [itemListJsonLd, breadcrumbJsonLd];
   <h1 class="text-2xl font-bold text-slate-900">{category.name}</h1>
   <p class="mt-2 text-slate-500">{intro}</p>
   <p class="mt-1 text-sm text-slate-400">{total}개 사이트{page > 1 ? ` · ${page}페이지` : ''}</p>
+
+  {categoryGuides.length > 0 && (
+    <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <p class="text-xs font-medium text-slate-500">이 분야 가이드</p>
+      <ul class="mt-1.5 space-y-1">
+        {categoryGuides.map((guide) => (
+          <li>
+            <a href={`/guides/${guide.id}`} class="text-sm font-medium text-slate-800 underline hover:text-slate-600">
+              {guide.data.title}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )}
 
   {subcategories.length > 0 && (
     <div class="mt-4 flex flex-wrap gap-2">
