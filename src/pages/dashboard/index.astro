@@ -1,6 +1,8 @@
 ---
 import { env } from 'cloudflare:workers';
 import Layout from '../../layouts/Layout.astro';
+import { submitToIndexNow } from '../../lib/indexnow';
+import { getCollection } from 'astro:content';
 import AdminSiteCard from '../../components/AdminSiteCard.astro';
 import {
   setSiteStatus,
@@ -12,6 +14,7 @@ import {
   getSitesForAdmin,
   getSiteById,
   deleteSite,
+  getSitemapData,
   setSiteTags,
   bulkMoveCategory,
   type AdminSiteStatusFilter,
@@ -25,7 +28,22 @@ let loginError = '';
 
 if (Astro.request.method === 'POST') {
   const data = await Astro.request.formData();
-  const action = String(data.get('action') ?? '');
+  /*
+  IndexNow 알림. 실패해도 관리자 작업을 막지 않는다.
+
+  승인·수정은 이미 DB 에 반영된 뒤에 부르므로, 알림이 안 갔다고 그 작업을 되돌릴 이유가
+  없다. 텔레그램 알림과 같은 방침이다. 상세 페이지와 함께 그 카테고리 목록도 보낸다.
+  목록에 항목이 하나 늘어난 것도 변경이기 때문이다.
+*/
+async function notifyIndexNow(paths: string[]): Promise<void> {
+  try {
+    await submitToIndexNow(paths);
+  } catch {
+    // 알림은 부가 기능이다.
+  }
+}
+
+const action = String(data.get('action') ?? '');
 
   if (action === 'login') {
     const password = String(data.get('password') ?? '');
@@ -79,6 +97,24 @@ if (Astro.request.method === 'POST') {
           })
         );
         return Astro.redirect(backTo);
+      }
+
+      if (action === 'indexnow_all') {
+        // 초기 시딩용. 사이트맵에 실린 URL 을 한 번에 보낸다.
+        const { sites, categories, tags } = await getSitemapData(env.DB);
+        const guides = await getCollection('guides', ({ data }) => !data.draft);
+        const paths = [
+          '/', '/about', '/guides', '/submit', '/faq', '/updates', '/contact', '/privacy', '/terms',
+          ...guides.map((g) => `/guides/${g.id}`),
+          ...categories.map((c) => `/category/${c.slug}`),
+          ...tags.map((t) => `/tag/${t.slug}`),
+          ...sites.map((site) => `/site/${site.slug}`),
+        ];
+        const result = await submitToIndexNow(paths);
+        const sep = redirectTo.includes('?') ? '&' : '?';
+        return Astro.redirect(
+          `${backTo}${sep}indexnow=${result.ok ? 'ok' : 'fail'}&n=${paths.length}`
+        );
       }
 
       if (action === 'bulk_move_category') {
@@ -171,6 +207,8 @@ if (Astro.request.method === 'POST') {
           });
           const tagNames = get('tags').split(',').map((t) => t.trim()).filter(Boolean);
           await setSiteTags(env.DB, id, tagNames);
+          const updated = await getSiteById(env.DB, id);
+          if (updated?.status === 'approved') await notifyIndexNow([`/site/${updated.slug}`]);
           return Astro.redirect(`${backTo}#site-${id}`);
         }
 
@@ -196,6 +234,8 @@ const categories = isAuthed ? await getCategories(env.DB) : [];
 const subcategories = isAuthed ? await getAllSubcategories(env.DB) : [];
 const updateFailed = Astro.url.searchParams.get('error') === 'update';
 const deleteFailed = Astro.url.searchParams.get('error') === 'delete';
+const indexNowResult = Astro.url.searchParams.get('indexnow');
+const indexNowCount = Astro.url.searchParams.get('n');
 
 const singleSite = isAuthed && singleSiteId ? await getSiteById(env.DB, singleSiteId) : null;
 const listResult =
@@ -236,6 +276,11 @@ const tabs: { value: AdminSiteStatusFilter; label: string }[] = [
           <a href="/dashboard/stats" class="text-slate-400 underline hover:text-slate-700">통계</a>
           <a href="/dashboard/reviews" class="text-slate-400 underline hover:text-slate-700">리뷰 관리</a>
           <form method="post">
+            <input type="hidden" name="action" value="indexnow_all" />
+            <input type="hidden" name="redirectTo" value={currentQueryString} />
+            <button type="submit" class="text-slate-400 hover:text-slate-700 underline">IndexNow 전체 제출</button>
+          </form>
+          <form method="post">
             <input type="hidden" name="action" value="logout" />
             <button type="submit" class="text-slate-400 hover:text-slate-700 underline">로그아웃</button>
           </form>
@@ -245,6 +290,14 @@ const tabs: { value: AdminSiteStatusFilter; label: string }[] = [
       {updateFailed && (
         <div class="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           수정 내용을 저장하지 못했습니다. 필수 항목(이름·URL·한 줄 소개·상세 설명·대분류)과 URL 형식을 확인해주세요.
+        </div>
+      )}
+
+      {indexNowResult && (
+        <div class={`mt-4 rounded-md border p-3 text-sm ${indexNowResult === 'ok' ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+          {indexNowResult === 'ok'
+            ? `IndexNow 에 ${indexNowCount}개 URL 을 제출했습니다. Bing·네이버·Yandex 로 전달되며 구글은 참여하지 않습니다.`
+            : 'IndexNow 제출에 실패했습니다. 키 파일이 정상적으로 열리는지 확인해주세요.'}
         </div>
       )}
 
