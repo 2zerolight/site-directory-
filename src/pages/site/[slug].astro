@@ -17,7 +17,27 @@ import { ADMIN_COOKIE_NAME, isValidSessionCookieValue } from '../../lib/auth';
 import { renderNotFound } from '../../lib/not-found';
 import { josa } from '../../lib/seo';
 
+/*
+  등록 시 사이트의 <title> 을 그대로 slug 로 만들어 마케팅 문구가 주소에 박힌 건들이
+  있었다(예: 포포몬-no-1-무료-인플루언서-체험단-협찬매칭). 이름과 slug 를 브랜드명으로
+  정리하면서 예전 주소가 죽지 않도록 301 로 넘긴다.
+
+  카테고리 slug 를 바꿀 때 쓰던 OLD_CATEGORY_SLUG_REDIRECTS 와 같은 방식이다.
+*/
+const OLD_SITE_SLUG_REDIRECTS: Record<string, string> = {
+  '리뷰노트-대한민국-체험단-수-1위-신뢰받는-리뷰-zyuinb': '리뷰노트-zyuinb',
+  '당신의-리뷰가-마케팅이-되는-곳-리뷰플레이스-yezuq1': '리뷰플레이스-yezuq1',
+  '포포몬-no-1-무료-인플루언서-체험단-협찬매칭-bbx5zo': '포포몬-bbx5zo',
+  '아싸뷰-간편한-체험단-마케팅-플랫폼-op66vv': '아싸뷰-op66vv',
+  '링블-당첨률-높은-체험단-사이트-n4irg0': '링블-n4irg0',
+};
+
 const { slug } = Astro.params;
+
+if (slug && OLD_SITE_SLUG_REDIRECTS[slug]) {
+  return Astro.redirect(`/site/${encodeURIComponent(OLD_SITE_SLUG_REDIRECTS[slug])}`, 301);
+}
+
 const site = slug ? await getSiteBySlug(env.DB, slug) : null;
 
 if (!site) {
