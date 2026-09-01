@@ -51,3 +51,46 @@ export function hasFinalConsonant(word: string): boolean {
 export function josa(word: string, withFinal: string, withoutFinal: string): string {
   return hasFinalConsonant(word) ? withFinal : withoutFinal;
 }
+
+/**
+ * 사이트 <title> 에서 브랜드명만 남긴다.
+ *
+ * 등록 폼은 og:site_name 이 없으면 <title> 을 그대로 이름으로 쓴다. 그런데 많은 사이트가
+ * 검색 노출을 노리고 제목에 홍보 문구를 붙여둔다.
+ *
+ *   "리뷰노트 - 대한민국 체험단 수 1위, 신뢰받는 리뷰"
+ *   "무료 URL 단축 · 텍스트 전송 · P2P 파일공유 - ww2.kr"
+ *
+ * 그대로 두면 상세 페이지의 h1 과 title 이 광고 문구가 되고, 검증한 적 없는 "1위" 같은
+ * 주장을 디렉토리가 그대로 싣게 된다. 주소(slug)에도 그대로 박힌다.
+ *
+ * 위 두 예처럼 브랜드가 앞에 오기도 하고 뒤에 오기도 해서, 자르는 위치를 고정할 수 없다.
+ * 대신 구분자 양쪽 중 짧은 쪽을 고른다 - 홍보 문구는 거의 항상 브랜드명보다 길다.
+ *
+ * 고른 쪽이 원문의 60% 를 넘으면 애매한 경우로 보고 원문을 그대로 둔다. 어차피 관리자가
+ * 검토 화면에서 고칠 수 있으므로, 확신이 없으면 건드리지 않는 쪽이 낫다.
+ *
+ * 가운뎃점(·)은 구분자로 쓰지 않는다. "텍스트 전송 · 파일공유"처럼 설명 안에서 항목을
+ * 나열할 때 더 많이 쓰여서, 이걸로 자르면 문장 조각만 남는다.
+ */
+const NAME_SEPARATORS = ['|', ' - ', ' – ', ' — ', ' :: '];
+
+export function cleanSiteName(raw: string): string {
+  const trimmed = raw.trim().replace(/\s+/g, ' ');
+  if (!trimmed) return trimmed;
+
+  for (const separator of NAME_SEPARATORS) {
+    const index = trimmed.indexOf(separator);
+    if (index <= 0) continue;
+
+    const head = trimmed.slice(0, index).trim();
+    const tail = trimmed.slice(index + separator.length).trim();
+    const shorter = head.length <= tail.length ? head : tail;
+
+    if (shorter.length >= 2 && shorter.length <= trimmed.length * 0.6) {
+      return shorter;
+    }
+  }
+
+  return trimmed;
+}

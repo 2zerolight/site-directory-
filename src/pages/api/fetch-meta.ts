@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import { cleanSiteName } from '../../lib/seo';
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -99,7 +100,10 @@ export const GET: APIRoute = async ({ url: requestUrl }) => {
     return json({ ok: false, error: '사이트에 접속할 수 없습니다.' });
   }
 
-  const name = decodeEntities(ogSiteName || title).slice(0, 100);
+  // og:site_name 은 대체로 브랜드명이지만 <title> 은 홍보 문구가 붙어 있는 경우가 많다.
+  // fallback 으로 제목을 쓸 때만 정리한다 (lib/seo.ts 의 cleanSiteName 참고).
+  const rawName = ogSiteName ? decodeEntities(ogSiteName) : cleanSiteName(decodeEntities(title));
+  const name = rawName.slice(0, 100);
   const desc = decodeEntities(description || ogDescription).slice(0, 2000);
 
   let logoUrl: string | null = null;
