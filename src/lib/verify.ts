@@ -7,7 +7,7 @@ function randomHex(byteLength: number): string {
     .join('');
 }
 
-/** 상대 도메인의 메타태그·DNS TXT 에 올리는 값. 남이 알아도 위험하지 않다 — 통과하려면 그쪽 도메인에 올려야 한다. */
+/** 상대 도메인의 메타태그·DNS TXT 에 올리는 값. 남이 알아도 위험하지 않다. 통과하려면 그쪽 도메인에 올려야 한다. */
 export function generateVerificationToken(): string {
   return `sitedir-${randomHex(16)}`;
 }

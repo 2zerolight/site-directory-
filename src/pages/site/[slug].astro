@@ -113,7 +113,7 @@ const keywordChips = toChips(site.main_keywords);
 
   디렉토리 상세 페이지가 원본 사이트를 이길 수 있는 거의 유일한 지점이다. 원본은
   자기 얘기만 하지 경쟁 서비스와 자기를 나란히 놓지 않는다. 표에 들어가는 값은 전부
-  DB 에 저장된 사실(하는 일·유형·서비스 지역)이고 우열 판단은 넣지 않는다 — 없는
+  DB 에 저장된 사실(하는 일·유형·서비스 지역)이고 우열 판단은 넣지 않는다. 없는
   정보를 지어내면 그 순간 이 페이지는 원본보다 나쁜 페이지가 된다.
 
   비교 대상이 2곳 미만이면 표가 성립하지 않으므로 블록 자체를 렌더링하지 않는다.
@@ -225,7 +225,7 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
 
   {!isApproved && (
     <div class="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
-      관리자 미리보기 — 이 사이트는 아직 {site.status === 'pending' ? '승인 대기 중' : '거절됨'}이라 공개 디렉토리에는 노출되지 않습니다.
+      관리자 미리보기: 이 사이트는 아직 {site.status === 'pending' ? '승인 대기 중' : '거절됨'}이라 공개 디렉토리에는 노출되지 않습니다.
     </div>
   )}
 
@@ -390,7 +390,7 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
     */}
     {isApproved && !site.ownership_verified && (
       <p class="mt-4 text-xs text-slate-400">
-        이 사이트 운영자세요? 소유권을 인증하면 인증 배지를 무료로 받으실 수 있습니다 —
+        이 사이트 운영자세요? 소유권을 인증하면 인증 배지를 무료로 받으실 수 있습니다.
         <a href={`mailto:${CONTACT_EMAIL}`} class="underline underline-offset-2 hover:text-slate-600">{CONTACT_EMAIL}</a>로 알려주세요.
       </p>
     )}
@@ -506,8 +506,8 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
                   )}
                 </th>
                 <td class="py-3 pr-4 text-slate-700">{row.services.join(', ')}</td>
-                <td class="py-3 pr-4 text-slate-500">{row.siteType ?? '—'}</td>
-                <td class="py-3 text-slate-500">{row.serviceRegion ?? '—'}</td>
+                <td class="py-3 pr-4 text-slate-500">{row.siteType ?? '-'}</td>
+                <td class="py-3 text-slate-500">{row.serviceRegion ?? '-'}</td>
               </tr>
             ))}
           </tbody>
@@ -532,7 +532,7 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
 </Layout>
 
 <script>
-  // 조회수는 서버 렌더링이 아니라 여기서 올린다 — /site/ 가 엣지에서 캐시되기
+  // 조회수는 서버 렌더링이 아니라 여기서 올린다. /site/ 가 엣지에서 캐시되기
   // 때문에 서버에서 세면 캐시 히트인 요청이 통째로 누락된다.
   const slug = document.querySelector<HTMLElement>('[data-view-slug]')?.dataset.viewSlug;
   if (slug) {

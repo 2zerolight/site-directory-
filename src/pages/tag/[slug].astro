@@ -31,7 +31,7 @@ if (page > totalPages) {
   return renderNotFound(Astro);
 }
 
-// 카테고리 페이지와 같은 이유 — 2페이지 이상은 self-canonical 이므로 제목/설명이
+// 카테고리 페이지와 같은 이유. 2페이지 이상은 self-canonical 이므로 제목/설명이
 // 1페이지와 겹치면 중복 제목으로 잡힌다.
 const canonicalPath = page > 1 ? `/tag/${tag.slug}?page=${page}` : `/tag/${tag.slug}`;
 const pageSuffix = page > 1 ? ` (${page}페이지)` : '';

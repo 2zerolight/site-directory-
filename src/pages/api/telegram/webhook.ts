@@ -16,8 +16,8 @@ import {
  * 확인은 두 겹이다.
  *
  *   1. setWebhook 에 등록한 secret_token 이 X-Telegram-Bot-Api-Secret-Token
- *      헤더로 되돌아오는지 — 텔레그램이 보낸 요청인지 가린다.
- *   2. 버튼을 누른 사람이 TELEGRAM_CHAT_ID 본인인지 — 봇을 알아낸 제3자가
+ *      헤더로 되돌아오는지. 텔레그램이 보낸 요청인지 가린다.
+ *   2. 버튼을 누른 사람이 TELEGRAM_CHAT_ID 본인인지. 봇을 알아낸 제3자가
  *      대화를 걸어 버튼을 만들어 누르는 경우를 막는다.
  *
  * 둘 중 하나라도 어긋나면 아무 일도 하지 않고 200 을 반환한다. 텔레그램은
@@ -83,7 +83,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   let resultLine: string;
   if (action === 'approve') {
-    // 관리자 화면의 승인과 같은 절차를 밟는다 — 승인 시점에 접속 상태를 함께 기록한다.
+    // 관리자 화면의 승인과 같은 절차를 밟는다. 승인 시점에 접속 상태를 함께 기록한다.
     await checkSiteHealth(env.DB, site.id, site.url);
     await setSiteStatus(env.DB, site.id, 'approved');
     resultLine = `✅ <b>승인됨</b> · ${escapeTelegramHtml(formatKst())}`;

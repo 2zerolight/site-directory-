@@ -98,7 +98,7 @@ const ogImageUrl = new URL(image || '/og-image.png', SITE_URL).toString();
         document.head.appendChild(tag);
       };
 
-      // 동의 철회. Consent Mode 를 denied 로 되돌리는 것만으로는 부족하다 —
+      // 동의 철회. Consent Mode 를 denied 로 되돌리는 것만으로는 부족하다 -
       // 동의했던 동안 이미 심어진 _ga 쿠키가 그대로 남아 이용자를 계속 식별한다.
       // 철회의 의미가 있으려면 그 쿠키까지 지워야 한다.
       window.sitedaRevokeConsent = function () {
@@ -141,7 +141,7 @@ const ogImageUrl = new URL(image || '/og-image.png', SITE_URL).toString();
       둘, 위 Consent Mode 기본값이 ad_storage/ad_user_data/ad_personalization 을
       전부 denied 로 선언해뒀기 때문에, 동의 전에는 쿠키 없이 비맞춤형 광고만
       나간다. 광고를 아예 막는 것과 달리 이쪽은 수익을 유지하면서도 동의 전
-      추적을 하지 않는다 — Google 이 CMP 연동에 권장하는 방식이다.
+      추적을 하지 않는다. Google 이 CMP 연동에 권장하는 방식이다.
 
       noindex 페이지에는 넣지 않는다. 404·검색결과·관리자 화면처럼 게시자 콘텐츠가
       없는 페이지에 광고를 붙이는 것은 AdSense 정책 위반이다.

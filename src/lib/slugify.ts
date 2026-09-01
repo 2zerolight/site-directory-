@@ -1,6 +1,6 @@
 // Generates a URL-safe slug from a site name. Korean/CJK characters and other
 // non-Latin scripts don't romanize meaningfully, so they're kept as-is and only
-// unsafe URL characters are stripped — the trailing random suffix guarantees
+// unsafe URL characters are stripped. The trailing random suffix guarantees
 // uniqueness even when two names collapse to the same slug.
 export function slugify(input: string): string {
   const base = input

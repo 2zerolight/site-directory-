@@ -42,7 +42,7 @@ const LINE_GAP = 2.6;
 /**
  * 월계관 잎 14장(좌우 7쌍). 반지름 15.5의 호 위에 잎의 *중심*을 얹어 서로 겹치게
  * 배치했다. 잎 밑동을 호에 붙이면 바깥으로만 뻗어 가시관처럼 보이고 월계관으로
- * 안 읽힌다 — 월계관 느낌은 겹쳐서 생기는 덩어리감에서 나온다.
+ * 안 읽힌다. 월계관 느낌은 겹쳐서 생기는 덩어리감에서 나온다.
  * 좌표는 56x52 기준. 승인된 시안과 픽셀 단위로 같게 두려고 상수로 박았다.
  */
 const LEAVES = [
@@ -120,7 +120,7 @@ export function badgeAltText(siteName: string): string {
 
 /**
  * 체크가 왼쪽 끝에서 오른쪽 끝으로 그려지고, 유지했다가 0.15초 디졸브로 사라진 뒤
- * 반복한다. 왼쪽 획은 등속으로 긋다가 꺾임점부터 오른쪽 획이 빨라진다 — 시간은
+ * 반복한다. 왼쪽 획은 등속으로 긋다가 꺾임점부터 오른쪽 획이 빨라진다. 시간은
  * 62:38로 나누는데 길이 비가 34:66이라 오른쪽이 약 3.2배 빠르다.
  *
  * `<img>`로 넣어도 SVG 내부의 CSS 애니메이션은 실행된다(JS만 차단된다).
@@ -153,7 +153,7 @@ function animationCss(): string {
 
 /**
  * 배지는 인증된 사이트에만 발급하므로 형태는 하나뿐이다. 미인증용 대체 렌더링을
- * 두지 않는 이유는 워드마크에 VERIFIED 가 박혀 있기 때문 — 잎을 선으로 바꾸고
+ * 두지 않는 이유는 워드마크에 VERIFIED 가 박혀 있기 때문. 잎을 선으로 바꾸고
  * 체크만 빼도 방문자는 "VERIFIED"만 읽는다. 인증 안 된 곳에는 아무것도 내주지
  * 않는 쪽이 맞다(엔드포인트에서 404).
  */
@@ -182,7 +182,7 @@ function line(x: number, y: number, size: number, text: string, fill: string, op
 
 /**
  * VERIFIED / SITEDA.KR 두 줄. 두 줄의 *잉크* 블록 중심이 centerY 에 오도록
- * 베이스라인을 역산한다 — 폰트의 em 박스가 아니라 잉크 기준이어야 눈에 맞는다.
+ * 베이스라인을 역산한다. 폰트의 em 박스가 아니라 잉크 기준이어야 눈에 맞는다.
  */
 function wordmarkBlock(x: number, centerY: number, p: Palette): string {
   const total = LABEL_INK_H + LINE_GAP + NAME_INK_H;
@@ -224,7 +224,7 @@ function renderStandard(p: Palette, title: string): string {
 </svg>`;
 }
 
-/** 엠블럼 단독 — 아이콘 자리밖에 없는 푸터용. 잉크에 딱 맞춰 자른다. */
+/** 엠블럼 단독: 아이콘 자리밖에 없는 푸터용. 잉크에 딱 맞춰 자른다. */
 function renderCompact(p: Palette, title: string): string {
   const inkH = 30;
   const scale = inkH / INK_H;
@@ -235,7 +235,7 @@ function renderCompact(p: Palette, title: string): string {
 </svg>`;
 }
 
-/** 씰 — 엠블럼을 키우고 아래에 두 줄 워드마크를 쌓는다. */
+/** 씰: 엠블럼을 키우고 아래에 두 줄 워드마크를 쌓는다. */
 function renderSeal(p: Palette, title: string): string {
   const size = 96;
   const inkH = 48;

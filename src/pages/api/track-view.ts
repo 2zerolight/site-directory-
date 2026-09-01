@@ -9,7 +9,7 @@ import { getSiteBySlug, incrementViewCount } from '../../lib/db';
  * 올리면 캐시 히트인 요청은 워커에 닿지도 않아 실제보다 크게 낮게 집계된다.
  * 캐시는 크롤 예산에 큰 이득이라 포기할 수 없으므로 집계를 캐시 밖으로 뺐다.
  *
- * 부수 효과로 집계가 더 정확해진다 — 크롤러는 JS를 실행하지 않으므로 봇 트래픽이
+ * 부수 효과로 집계가 더 정확해진다. 크롤러는 JS를 실행하지 않으므로 봇 트래픽이
  * 조회수를 부풀리지 않고, 사람 방문만 남는다.
  */
 export const POST: APIRoute = async ({ request }) => {

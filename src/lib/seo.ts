@@ -36,7 +36,7 @@ export function buildListDescription(lead: string, sampleNames: string[]): strin
  * 다 틀린다.
  *
  * 한글 음절은 0xAC00 부터 28개 단위로 종성이 순환한다. 나머지가 0이면 받침이 없다.
- * 한글이 아닌 문자로 끝나면(영문·숫자) 받침 없는 쪽을 쓴다 — 읽는 방식이 사람마다
+ * 한글이 아닌 문자로 끝나면(영문·숫자) 받침 없는 쪽을 쓴다. 읽는 방식이 사람마다
  * 달라서 어느 쪽도 확실하지 않고, 이 경우 받침 없는 쪽이 덜 어색하다.
  */
 export function hasFinalConsonant(word: string): boolean {

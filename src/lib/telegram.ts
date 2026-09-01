@@ -11,7 +11,7 @@ import type { SiteWithCategory } from '../types';
  *   TELEGRAM_WEBHOOK_SECRET 웹훅 진위 확인용 임의 문자열
  *
  * 셋 중 하나라도 없으면 알림 기능만 조용히 꺼진다. 등록 자체는 그대로 동작해야
- * 하기 때문이다 — 알림이 실패했다고 제출을 막으면 손해가 더 크다.
+ * 하기 때문이다. 알림이 실패했다고 제출을 막으면 손해가 더 크다.
  */
 export interface TelegramConfig {
   botToken: string;
@@ -97,7 +97,7 @@ export function buildSubmissionMessage(site: {
   if (site.operatorName) meta.push(`운영: ${esc(site.operatorName)}`);
   meta.push(`제출자: ${site.submittedEmail ? esc(site.submittedEmail) : '(미입력)'}`);
   // 제3자 제출은 검토 기준이 달라지므로 눈에 띄게 표시한다.
-  meta.push(site.thirdPartySubmission ? `⚠️ <b>제3자 제출</b> — 운영자 본인이 아님` : `본인 운영 사이트로 제출됨`);
+  meta.push(site.thirdPartySubmission ? `⚠️ <b>제3자 제출</b>: 운영자 본인이 아님` : `본인 운영 사이트로 제출됨`);
 
   rows.push(``, meta.join('\n'));
   return rows.join('\n');

@@ -247,7 +247,7 @@ export async function getComparableSites(
 }
 
 /**
- * 인증 페이지는 오직 시크릿으로만 열린다. slug 로는 못 찾는다 — slug 는 공개 정보라
+ * 인증 페이지는 오직 시크릿으로만 열린다. slug 로는 못 찾는다. slug 는 공개 정보라
  * 그걸로 열 수 있으면 열거가 가능해지고, 그게 이 흐름을 닫았던 이유다.
  */
 export async function getSiteByVerificationSecret(
@@ -272,7 +272,7 @@ export async function touchVerifyAttempt(db: D1Database, id: number): Promise<vo
  * 사이트를 영구 삭제한다. 거절(status='rejected')과 달리 되돌릴 수 없다.
  *
  * site_tags·reviews 는 ON DELETE CASCADE 로 같이 지워진다. review_audit_log 는
- * 일부러 FK 를 걸지 않았으므로 남는다 — 신고나 분쟁 대응 기록은 콘텐츠보다 오래
+ * 일부러 FK 를 걸지 않았으므로 남는다. 신고나 분쟁 대응 기록은 콘텐츠보다 오래
  * 살아야 한다(schema.sql 주석 참고).
  */
 export async function deleteSite(db: D1Database, id: number): Promise<void> {

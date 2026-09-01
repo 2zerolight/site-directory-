@@ -1,6 +1,6 @@
 // Stateless admin session: the cookie carries an expiry timestamp plus an
 // HMAC signature over that timestamp, keyed by ADMIN_PASSWORD. No session
-// table needed — anyone without the password can't forge a valid signature,
+// table needed. Anyone without the password can't forge a valid signature,
 // and the timestamp bounds how long a stolen cookie stays useful.
 export const ADMIN_COOKIE_NAME = 'admin_session';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
