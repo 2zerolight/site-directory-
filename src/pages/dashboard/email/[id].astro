@@ -9,6 +9,8 @@ import {
   rejectSkeleton,
   defaultTemplateFor,
   REJECT_REASONS,
+  LIST_UL_STYLE,
+  LIST_LI_STYLE,
   type EmailTemplateKey,
 } from '../../../lib/email-templates';
 
@@ -16,8 +18,12 @@ import {
   제출자에게 보낼 메일 문안을 만들어 주는 관리자 화면.
 
   메일 발송 기능이 아니다. 관리자가 지메일에서 보내므로 여기서는 받는 사람·제목·본문을
-  복사 버튼과 함께 보여주고, Gmail 새 메일 창을 미리 채워 여는 링크를 붙인다. 본문은
-  textarea 라 보내기 전에 고칠 수 있다.
+  복사 버튼과 함께 보여준다. 본문은 서식(HTML)과 평문 두 가지다.
+
+  - 서식: 클립보드에 text/html 과 text/plain 을 같이 넣는다. 지메일 작성창에 붙여넣으면
+    인라인 스타일이 살아서 들어간다. 미리보기는 contenteditable 이라 보내기 전에 고칠
+    수 있다.
+  - 평문: textarea. "Gmail 에서 열기"는 URL 로 넘기는 구조라 평문만 실을 수 있다.
 
   인증 링크(verification_secret)가 본문에 들어가므로 이 페이지는 관리자만 연다.
 */
@@ -76,8 +82,17 @@ if (!site.verification_secret) {
 
 const pageData = {
   to: site.submitted_email ?? '',
-  drafts: drafts.map((d) => ({ key: d.key, subject: d.subject, body: d.body })),
-  reject: { intro: reject.intro, outro: reject.outro, reasons: REJECT_REASONS },
+  drafts: drafts.map((d) => ({ key: d.key, subject: d.subject, text: d.text, html: d.html })),
+  reject: {
+    htmlTemplate: reject.htmlTemplate,
+    introText: reject.introText,
+    introHtml: reject.introHtml,
+    outroText: reject.outroText,
+    outroHtml: reject.outroHtml,
+    reasons: REJECT_REASONS,
+    ulStyle: LIST_UL_STYLE,
+    liStyle: LIST_LI_STYLE,
+  },
   initialKey,
 };
 
@@ -85,6 +100,8 @@ const tabClass = (active: boolean) =>
   `rounded-full px-3 py-1.5 text-sm font-medium ${active ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`;
 const copyButtonClass =
   'shrink-0 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50';
+const fieldClass =
+  'mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900';
 ---
 
 <Layout title={`메일 작성 · ${site.name}`} description="제출자에게 보낼 메일 문안" canonicalPath={`/dashboard/email/${site.id}`} noindex>
@@ -109,8 +126,8 @@ const copyButtonClass =
   </div>
 
   <p class="mt-4 text-xs text-slate-400">
-    메일은 여기서 발송되지 않습니다. 문안을 복사해 지메일에 붙여넣거나, "Gmail 에서 열기"로 새 메일 창을 미리 채워 여세요.
-    본문은 보내기 전에 이 화면에서 고칠 수 있습니다.
+    메일은 여기서 발송되지 않습니다. "서식 본문 복사"를 눌러 지메일 새 메일 창에 붙여넣으면 아래 미리보기 모양 그대로 들어갑니다.
+    미리보기는 직접 고칠 수 있습니다. 평문이 필요하면 "평문" 탭을 쓰세요.
   </p>
 
   <div class="mt-5 flex flex-wrap gap-2" role="tablist">
@@ -167,7 +184,7 @@ const copyButtonClass =
         type="text"
         value={site.submitted_email ?? ''}
         placeholder="제출자 이메일이 없습니다. 사이트에 게시된 연락처를 직접 넣으세요."
-        class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+        class={fieldClass}
       />
       {!site.submitted_email && (
         <p class="mt-1 text-xs text-amber-700">
@@ -184,28 +201,46 @@ const copyButtonClass =
         <label class="text-xs font-medium text-slate-500" for="email-subject">제목</label>
         <button type="button" data-copy="email-subject" class={copyButtonClass}>복사</button>
       </div>
-      <input
-        id="email-subject"
-        type="text"
-        class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
-      />
+      <input id="email-subject" type="text" class={fieldClass} />
     </div>
 
     <div>
-      <div class="flex items-center justify-between gap-3">
-        <label class="text-xs font-medium text-slate-500" for="email-body">본문</label>
-        <button type="button" data-copy="email-body" class={copyButtonClass}>복사</button>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <span class="text-xs font-medium text-slate-500">본문</span>
+          <div class="flex rounded-md border border-slate-200 p-0.5 text-xs">
+            <button type="button" data-mode="html" class="rounded px-2.5 py-1 font-medium bg-slate-900 text-white">서식</button>
+            <button type="button" data-mode="text" class="rounded px-2.5 py-1 font-medium text-slate-500 hover:text-slate-900">평문</button>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" data-copy-html class={copyButtonClass}>서식 본문 복사</button>
+          <button type="button" data-copy="email-body" hidden class={copyButtonClass}>평문 복사</button>
+        </div>
       </div>
+
+      {/* 서식 미리보기. 지메일에 붙을 모양 그대로 보여준다. 이 안의 스타일은 전부 인라인이다. */}
+      <div data-html-wrap class="mt-2 rounded-md border border-slate-200 bg-slate-50 p-3 sm:p-6">
+        <div
+          id="email-html"
+          contenteditable="true"
+          spellcheck="false"
+          class="mx-auto max-w-[640px] rounded-md border border-slate-200 bg-white px-6 py-6 outline-none focus:ring-2 focus:ring-slate-900 sm:px-8"
+        ></div>
+        <p class="mt-2 text-center text-[11px] text-slate-400">미리보기를 클릭하면 바로 고칠 수 있습니다. 문안 탭이나 거절 사유를 바꾸면 고친 내용은 초기화됩니다.</p>
+      </div>
+
       <textarea
         id="email-body"
+        hidden
         rows="24"
         class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-[13px] leading-relaxed text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
       ></textarea>
     </div>
 
     <div class="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
-      <button type="button" data-copy-all class="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
-        제목 + 본문 복사
+      <button type="button" data-copy-html-main class="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
+        서식 본문 복사
       </button>
       <a
         data-gmail-link
@@ -213,21 +248,34 @@ const copyButtonClass =
         target="_blank"
         rel="noopener noreferrer"
         class="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        title="받는 사람과 제목이 채워진 새 메일 창을 엽니다. 본문은 평문으로 들어가니, 서식이 필요하면 본문을 지우고 붙여넣으세요."
       >
         Gmail 에서 열기 →
       </a>
       <span data-copy-status class="text-xs text-slate-400" aria-live="polite"></span>
     </div>
+    <p class="text-[11px] text-slate-400">
+      Gmail 열기는 주소로 값을 넘기는 방식이라 본문이 평문으로 들어갑니다. 서식 메일을 보내려면 새 메일 창에서 본문을 비우고 "서식 본문 복사"한 내용을 붙여넣으세요.
+    </p>
   </div>
 </Layout>
 
 <script>
-  type Draft = { key: string; subject: string; body: string };
+  type Draft = { key: string; subject: string; text: string; html: string };
   type Reason = { id: string; label: string; text: string };
   type PageData = {
     to: string;
     drafts: Draft[];
-    reject: { intro: string; outro: string; reasons: Reason[] };
+    reject: {
+      htmlTemplate: string;
+      introText: string;
+      introHtml: string;
+      outroText: string;
+      outroHtml: string;
+      reasons: Reason[];
+      ulStyle: string;
+      liStyle: string;
+    };
     initialKey: string;
   };
 
@@ -238,24 +286,49 @@ const copyButtonClass =
     const toInput = document.getElementById('email-to') as HTMLInputElement;
     const subjectInput = document.getElementById('email-subject') as HTMLInputElement;
     const bodyInput = document.getElementById('email-body') as HTMLTextAreaElement;
+    const htmlPreview = document.getElementById('email-html') as HTMLDivElement;
+    const htmlWrap = document.querySelector<HTMLElement>('[data-html-wrap]');
     const gmailLink = document.querySelector<HTMLAnchorElement>('[data-gmail-link]');
     const status = document.querySelector<HTMLElement>('[data-copy-status]');
     const rejectPanel = document.querySelector<HTMLElement>('[data-reject-panel]');
     const rejectCustom = document.querySelector<HTMLTextAreaElement>('[data-reject-custom]');
     const reasonBoxes = Array.from(document.querySelectorAll<HTMLInputElement>('[data-reject-reason]'));
+    const modeButtons = Array.from(document.querySelectorAll<HTMLElement>('[data-mode]'));
+    const copyTextButton = document.querySelector<HTMLElement>('[data-copy="email-body"]');
+    const copyHtmlButtons = document.querySelectorAll<HTMLElement>('[data-copy-html], [data-copy-html-main]');
 
     let currentKey = data.initialKey;
+    let mode: 'html' | 'text' = 'html';
 
-    function buildRejectBody(): string {
+    function escapeHtml(value: string): string {
+      return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function pickedReasons(): string[] {
       const picked = reasonBoxes
         .filter((box) => box.checked)
         .map((box) => data.reject.reasons.find((r) => r.id === box.dataset.rejectReason))
         .filter((r): r is Reason => Boolean(r))
-        .map((r) => `- ${r.text}`);
+        .map((r) => r.text);
       const custom = rejectCustom?.value.trim();
-      if (custom) picked.push(`- ${custom}`);
-      const reasons = picked.length > 0 ? picked.join('\n\n') : '- (사유를 선택하세요)';
-      return `${data.reject.intro}\n\n${reasons}\n\n${data.reject.outro}`;
+      if (custom) picked.push(custom);
+      return picked;
+    }
+
+    function buildRejectText(): string {
+      const picked = pickedReasons();
+      const reasons = picked.length > 0 ? picked.map((t) => `- ${t}`).join('\n\n') : '- (사유를 선택하세요)';
+      return `${data.reject.introText}\n\n${reasons}\n\n${data.reject.outroText}`;
+    }
+
+    function buildRejectHtml(): string {
+      const picked = pickedReasons();
+      const items =
+        picked.length > 0
+          ? picked.map((t) => `<li style="${data.reject.liStyle}">${escapeHtml(t)}</li>`).join('\n')
+          : `<li style="${data.reject.liStyle}color:#b91c1c;">(사유를 선택하세요)</li>`;
+      const body = `${data.reject.introHtml}\n<ul style="${data.reject.ulStyle}">\n${items}\n</ul>\n${data.reject.outroHtml}`;
+      return data.reject.htmlTemplate.replace('{{BODY}}', body);
     }
 
     function updateGmailLink() {
@@ -270,12 +343,38 @@ const copyButtonClass =
       gmailLink.href = `https://mail.google.com/mail/?${params.toString()}`;
     }
 
+    function renderBody() {
+      const draft = data.drafts.find((d) => d.key === currentKey);
+      if (!draft) return;
+      bodyInput.value = currentKey === 'reject' ? buildRejectText() : draft.text;
+      htmlPreview.innerHTML = currentKey === 'reject' ? buildRejectHtml() : draft.html;
+      updateGmailLink();
+    }
+
+    function setMode(next: 'html' | 'text') {
+      mode = next;
+      const showHtml = mode === 'html';
+      if (htmlWrap) htmlWrap.hidden = !showHtml;
+      bodyInput.hidden = showHtml;
+      if (copyTextButton) copyTextButton.hidden = showHtml;
+      copyHtmlButtons.forEach((b) => {
+        if (b.hasAttribute('data-copy-html')) b.hidden = !showHtml;
+      });
+      modeButtons.forEach((b) => {
+        const active = b.dataset.mode === mode;
+        b.classList.toggle('bg-slate-900', active);
+        b.classList.toggle('text-white', active);
+        b.classList.toggle('text-slate-500', !active);
+        b.classList.toggle('hover:text-slate-900', !active);
+      });
+    }
+
     function fill(key: string) {
       const draft = data.drafts.find((d) => d.key === key);
       if (!draft) return;
       currentKey = key;
       subjectInput.value = draft.subject;
-      bodyInput.value = key === 'reject' ? buildRejectBody() : draft.body;
+      renderBody();
 
       document.querySelectorAll<HTMLElement>('[data-template-tab]').forEach((tab) => {
         const active = tab.dataset.templateTab === key;
@@ -294,28 +393,15 @@ const copyButtonClass =
       const url = new URL(location.href);
       url.searchParams.set('type', key);
       history.replaceState(null, '', url.toString());
-      updateGmailLink();
     }
 
     document.querySelectorAll<HTMLElement>('[data-template-tab]').forEach((tab) => {
       tab.addEventListener('click', () => fill(tab.dataset.templateTab ?? ''));
     });
+    modeButtons.forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode === 'text' ? 'text' : 'html')));
 
-    reasonBoxes.forEach((box) => {
-      box.addEventListener('change', () => {
-        if (currentKey === 'reject') {
-          bodyInput.value = buildRejectBody();
-          updateGmailLink();
-        }
-      });
-    });
-    rejectCustom?.addEventListener('input', () => {
-      if (currentKey === 'reject') {
-        bodyInput.value = buildRejectBody();
-        updateGmailLink();
-      }
-    });
-
+    reasonBoxes.forEach((box) => box.addEventListener('change', () => currentKey === 'reject' && renderBody()));
+    rejectCustom?.addEventListener('input', () => currentKey === 'reject' && renderBody());
     [toInput, subjectInput, bodyInput].forEach((el) => el.addEventListener('input', updateGmailLink));
 
     function flash(message: string) {
@@ -323,7 +409,7 @@ const copyButtonClass =
       status.textContent = message;
       window.setTimeout(() => {
         if (status.textContent === message) status.textContent = '';
-      }, 2000);
+      }, 2500);
     }
 
     async function copyText(text: string, label: string) {
@@ -335,19 +421,48 @@ const copyButtonClass =
       }
     }
 
+    /*
+      서식 복사. text/html 과 text/plain 을 같이 넣어야 지메일은 서식으로, 평문만 받는
+      곳은 글자로 붙는다. ClipboardItem 을 못 쓰는 브라우저에서는 미리보기를 선택해
+      execCommand('copy') 로 대신한다.
+    */
+    async function copyHtml() {
+      const html = htmlPreview.innerHTML;
+      const text = htmlPreview.innerText;
+      try {
+        if (typeof ClipboardItem !== 'undefined') {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              'text/html': new Blob([html], { type: 'text/html' }),
+              'text/plain': new Blob([text], { type: 'text/plain' }),
+            }),
+          ]);
+        } else {
+          const range = document.createRange();
+          range.selectNodeContents(htmlPreview);
+          const selection = window.getSelection();
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+          document.execCommand('copy');
+          selection?.removeAllRanges();
+        }
+        flash('서식 본문 복사됨. 지메일 본문에 붙여넣으세요.');
+      } catch {
+        flash('복사에 실패했습니다. 미리보기를 드래그해 복사하세요.');
+      }
+    }
+
     document.querySelectorAll<HTMLElement>('[data-copy]').forEach((button) => {
       button.addEventListener('click', () => {
         const target = document.getElementById(button.dataset.copy ?? '') as HTMLInputElement | HTMLTextAreaElement | null;
         if (!target) return;
-        const label = { 'email-to': '받는 사람', 'email-subject': '제목', 'email-body': '본문' }[target.id] ?? '내용';
+        const label = { 'email-to': '받는 사람', 'email-subject': '제목', 'email-body': '평문 본문' }[target.id] ?? '내용';
         void copyText(target.value, label);
       });
     });
+    copyHtmlButtons.forEach((b) => b.addEventListener('click', () => void copyHtml()));
 
-    document.querySelector<HTMLElement>('[data-copy-all]')?.addEventListener('click', () => {
-      void copyText(`${subjectInput.value}\n\n${bodyInput.value}`, '제목과 본문');
-    });
-
+    setMode('html');
     fill(currentKey);
   }
 </script>
