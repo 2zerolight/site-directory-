@@ -1,0 +1,353 @@
+---
+import { env } from 'cloudflare:workers';
+import Layout from '../../../layouts/Layout.astro';
+import { getSiteById } from '../../../lib/db';
+import { ADMIN_COOKIE_NAME, isValidSessionCookieValue } from '../../../lib/auth';
+import { renderNotFound } from '../../../lib/not-found';
+import {
+  buildEmailDrafts,
+  rejectSkeleton,
+  defaultTemplateFor,
+  REJECT_REASONS,
+  type EmailTemplateKey,
+} from '../../../lib/email-templates';
+
+/*
+  제출자에게 보낼 메일 문안을 만들어 주는 관리자 화면.
+
+  메일 발송 기능이 아니다. 관리자가 지메일에서 보내므로 여기서는 받는 사람·제목·본문을
+  복사 버튼과 함께 보여주고, Gmail 새 메일 창을 미리 채워 여는 링크를 붙인다. 본문은
+  textarea 라 보내기 전에 고칠 수 있다.
+
+  인증 링크(verification_secret)가 본문에 들어가므로 이 페이지는 관리자만 연다.
+*/
+const isAuthed = await isValidSessionCookieValue(env.ADMIN_PASSWORD, Astro.cookies.get(ADMIN_COOKIE_NAME)?.value);
+if (!isAuthed) {
+  return Astro.redirect('/dashboard');
+}
+
+const id = Number(Astro.params.id);
+const site = Number.isInteger(id) && id > 0 ? await getSiteById(env.DB, id) : null;
+if (!site) {
+  return renderNotFound(Astro);
+}
+
+const drafts = buildEmailDrafts(site);
+const reject = rejectSkeleton(site);
+
+const typeParam = Astro.url.searchParams.get('type') as EmailTemplateKey | null;
+const initialKey: EmailTemplateKey =
+  typeParam && drafts.some((d) => d.key === typeParam) ? typeParam : defaultTemplateFor(site);
+
+const statusLabel = { pending: '대기', approved: '승인됨', rejected: '거절됨' }[site.status];
+const verificationLabel = site.ownership_verified
+  ? site.verified_by_admin
+    ? '관리자 인증됨'
+    : '소유권 인증됨'
+  : site.third_party_submission
+    ? '제3자 제출'
+    : '미인증';
+
+/*
+  문안과 사이트 상태가 어긋나는 조합을 짚어준다. 막지는 않는다. 승인 버튼을 누르기
+  전에 문안부터 준비해 두는 흐름도 있기 때문이다.
+*/
+const warnings: Partial<Record<EmailTemplateKey, string>> = {};
+if (site.status !== 'approved') {
+  const msg = `이 사이트는 아직 "${statusLabel}" 상태입니다. 승인 메일은 대시보드에서 승인한 뒤에 보내세요.`;
+  warnings.approve_unverified = msg;
+  warnings.approve_verified = msg;
+  warnings.approve_third_party = msg;
+}
+if (site.ownership_verified) {
+  warnings.approve_unverified = '이미 소유권 인증이 끝난 사이트입니다. "승인 (인증됨)" 문안을 쓰세요.';
+  warnings.verify_link = '이미 소유권 인증이 끝난 사이트입니다. 인증 링크를 다시 보낼 이유가 없습니다.';
+} else if (site.status === 'approved' && !site.third_party_submission) {
+  warnings.approve_verified = '아직 소유권 인증이 되지 않은 사이트입니다. "승인 (미인증)" 문안을 쓰세요.';
+}
+if (site.status !== 'rejected') {
+  warnings.reject = `이 사이트는 아직 "${statusLabel}" 상태입니다. 대시보드에서 거절 처리도 함께 하세요.`;
+}
+if (!site.verification_secret) {
+  const msg = '인증 링크(verification_secret)가 없어 본문에 링크 대신 "답장 주세요" 문구가 들어갑니다.';
+  warnings.approve_unverified = warnings.approve_unverified ?? msg;
+  warnings.verify_link = warnings.verify_link ?? msg;
+}
+
+const pageData = {
+  to: site.submitted_email ?? '',
+  drafts: drafts.map((d) => ({ key: d.key, subject: d.subject, body: d.body })),
+  reject: { intro: reject.intro, outro: reject.outro, reasons: REJECT_REASONS },
+  initialKey,
+};
+
+const tabClass = (active: boolean) =>
+  `rounded-full px-3 py-1.5 text-sm font-medium ${active ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`;
+const copyButtonClass =
+  'shrink-0 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50';
+---
+
+<Layout title={`메일 작성 · ${site.name}`} description="제출자에게 보낼 메일 문안" canonicalPath={`/dashboard/email/${site.id}`} noindex>
+  <script type="application/json" id="email-page-data" is:inline set:html={JSON.stringify(pageData)} />
+
+  <nav class="text-sm text-slate-400">
+    <a href="/dashboard" class="hover:text-slate-600">사이트 관리</a> <span class="mx-1">/</span>
+    <a href={`/dashboard?site=${site.id}#site-${site.id}`} class="hover:text-slate-600">{site.name}</a>
+    <span class="mx-1">/</span> 메일 작성
+  </nav>
+
+  <div class="mt-3 flex flex-wrap items-start justify-between gap-3">
+    <div class="min-w-0">
+      <h1 class="text-xl font-bold text-slate-900">{site.name}</h1>
+      <p class="mt-1 text-sm text-slate-500">
+        <a href={site.url} target="_blank" rel="noopener noreferrer" class="underline">{site.url}</a>
+        <span class="mx-2 text-slate-300">·</span>{statusLabel}
+        <span class="mx-2 text-slate-300">·</span>{verificationLabel}
+      </p>
+    </div>
+    <a href={`/dashboard?site=${site.id}#site-${site.id}`} class="text-sm text-slate-400 underline hover:text-slate-700">← 사이트로 돌아가기</a>
+  </div>
+
+  <p class="mt-4 text-xs text-slate-400">
+    메일은 여기서 발송되지 않습니다. 문안을 복사해 지메일에 붙여넣거나, "Gmail 에서 열기"로 새 메일 창을 미리 채워 여세요.
+    본문은 보내기 전에 이 화면에서 고칠 수 있습니다.
+  </p>
+
+  <div class="mt-5 flex flex-wrap gap-2" role="tablist">
+    {drafts.map((d) => (
+      <button type="button" role="tab" data-template-tab={d.key} aria-selected={d.key === initialKey ? 'true' : 'false'} class={tabClass(d.key === initialKey)}>
+        {d.label}
+      </button>
+    ))}
+  </div>
+
+  {drafts.map((d) => (
+    <div data-template-hint={d.key} hidden={d.key !== initialKey} class="mt-3 space-y-2">
+      <p class="text-xs text-slate-500">{d.hint}</p>
+      {warnings[d.key] && (
+        <p class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">{warnings[d.key]}</p>
+      )}
+    </div>
+  ))}
+
+  <div data-reject-panel hidden={initialKey !== 'reject'} class="mt-4 rounded-lg border border-red-100 bg-red-50/40 p-4">
+    <h2 class="text-sm font-semibold text-slate-900">거절 사유 선택</h2>
+    <p class="mt-1 text-xs text-slate-500">여러 개를 고를 수 있습니다. 고를 때마다 본문이 다시 채워지므로, 본문을 손으로 고칠 거면 사유를 먼저 확정하세요.</p>
+    <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+      {REJECT_REASONS.map((r) => (
+        <label class="flex items-start gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:border-slate-400">
+          <input type="checkbox" data-reject-reason={r.id} class="mt-0.5" />
+          <span>
+            <span class="font-medium">{r.label}</span>
+            <span class="mt-0.5 block text-xs text-slate-400">{r.text}</span>
+          </span>
+        </label>
+      ))}
+    </div>
+    <div class="mt-3">
+      <label class="text-xs font-medium text-slate-500" for="reject-custom">직접 적는 사유 (선택)</label>
+      <textarea
+        id="reject-custom"
+        data-reject-custom
+        rows="2"
+        placeholder="위 항목으로 설명이 안 되는 이유가 있으면 여기에 적으세요. 본문의 사유 목록 마지막에 붙습니다."
+        class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+      ></textarea>
+    </div>
+  </div>
+
+  <div class="mt-5 space-y-4 rounded-lg border border-slate-200 bg-white p-5">
+    <div>
+      <div class="flex items-center justify-between gap-3">
+        <label class="text-xs font-medium text-slate-500" for="email-to">받는 사람</label>
+        <button type="button" data-copy="email-to" class={copyButtonClass}>복사</button>
+      </div>
+      <input
+        id="email-to"
+        type="text"
+        value={site.submitted_email ?? ''}
+        placeholder="제출자 이메일이 없습니다. 사이트에 게시된 연락처를 직접 넣으세요."
+        class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+      />
+      {!site.submitted_email && (
+        <p class="mt-1 text-xs text-amber-700">
+          제출자 이메일이 기록돼 있지 않습니다.
+          {site.contact_email && (
+            <>공개 이메일로 등록된 <span class="font-mono">{site.contact_email}</span> 이 있습니다.</>
+          )}
+        </p>
+      )}
+    </div>
+
+    <div>
+      <div class="flex items-center justify-between gap-3">
+        <label class="text-xs font-medium text-slate-500" for="email-subject">제목</label>
+        <button type="button" data-copy="email-subject" class={copyButtonClass}>복사</button>
+      </div>
+      <input
+        id="email-subject"
+        type="text"
+        class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+      />
+    </div>
+
+    <div>
+      <div class="flex items-center justify-between gap-3">
+        <label class="text-xs font-medium text-slate-500" for="email-body">본문</label>
+        <button type="button" data-copy="email-body" class={copyButtonClass}>복사</button>
+      </div>
+      <textarea
+        id="email-body"
+        rows="24"
+        class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-[13px] leading-relaxed text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+      ></textarea>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
+      <button type="button" data-copy-all class="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
+        제목 + 본문 복사
+      </button>
+      <a
+        data-gmail-link
+        href="#"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+      >
+        Gmail 에서 열기 →
+      </a>
+      <span data-copy-status class="text-xs text-slate-400" aria-live="polite"></span>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  type Draft = { key: string; subject: string; body: string };
+  type Reason = { id: string; label: string; text: string };
+  type PageData = {
+    to: string;
+    drafts: Draft[];
+    reject: { intro: string; outro: string; reasons: Reason[] };
+    initialKey: string;
+  };
+
+  const raw = document.getElementById('email-page-data')?.textContent;
+  if (raw) {
+    const data = JSON.parse(raw) as PageData;
+
+    const toInput = document.getElementById('email-to') as HTMLInputElement;
+    const subjectInput = document.getElementById('email-subject') as HTMLInputElement;
+    const bodyInput = document.getElementById('email-body') as HTMLTextAreaElement;
+    const gmailLink = document.querySelector<HTMLAnchorElement>('[data-gmail-link]');
+    const status = document.querySelector<HTMLElement>('[data-copy-status]');
+    const rejectPanel = document.querySelector<HTMLElement>('[data-reject-panel]');
+    const rejectCustom = document.querySelector<HTMLTextAreaElement>('[data-reject-custom]');
+    const reasonBoxes = Array.from(document.querySelectorAll<HTMLInputElement>('[data-reject-reason]'));
+
+    let currentKey = data.initialKey;
+
+    function buildRejectBody(): string {
+      const picked = reasonBoxes
+        .filter((box) => box.checked)
+        .map((box) => data.reject.reasons.find((r) => r.id === box.dataset.rejectReason))
+        .filter((r): r is Reason => Boolean(r))
+        .map((r) => `- ${r.text}`);
+      const custom = rejectCustom?.value.trim();
+      if (custom) picked.push(`- ${custom}`);
+      const reasons = picked.length > 0 ? picked.join('\n\n') : '- (사유를 선택하세요)';
+      return `${data.reject.intro}\n\n${reasons}\n\n${data.reject.outro}`;
+    }
+
+    function updateGmailLink() {
+      if (!gmailLink) return;
+      const params = new URLSearchParams({
+        view: 'cm',
+        fs: '1',
+        to: toInput.value.trim(),
+        su: subjectInput.value,
+        body: bodyInput.value,
+      });
+      gmailLink.href = `https://mail.google.com/mail/?${params.toString()}`;
+    }
+
+    function fill(key: string) {
+      const draft = data.drafts.find((d) => d.key === key);
+      if (!draft) return;
+      currentKey = key;
+      subjectInput.value = draft.subject;
+      bodyInput.value = key === 'reject' ? buildRejectBody() : draft.body;
+
+      document.querySelectorAll<HTMLElement>('[data-template-tab]').forEach((tab) => {
+        const active = tab.dataset.templateTab === key;
+        tab.setAttribute('aria-selected', active ? 'true' : 'false');
+        tab.classList.toggle('bg-slate-900', active);
+        tab.classList.toggle('text-white', active);
+        tab.classList.toggle('bg-slate-100', !active);
+        tab.classList.toggle('text-slate-600', !active);
+        tab.classList.toggle('hover:bg-slate-200', !active);
+      });
+      document.querySelectorAll<HTMLElement>('[data-template-hint]').forEach((el) => {
+        el.hidden = el.dataset.templateHint !== key;
+      });
+      if (rejectPanel) rejectPanel.hidden = key !== 'reject';
+
+      const url = new URL(location.href);
+      url.searchParams.set('type', key);
+      history.replaceState(null, '', url.toString());
+      updateGmailLink();
+    }
+
+    document.querySelectorAll<HTMLElement>('[data-template-tab]').forEach((tab) => {
+      tab.addEventListener('click', () => fill(tab.dataset.templateTab ?? ''));
+    });
+
+    reasonBoxes.forEach((box) => {
+      box.addEventListener('change', () => {
+        if (currentKey === 'reject') {
+          bodyInput.value = buildRejectBody();
+          updateGmailLink();
+        }
+      });
+    });
+    rejectCustom?.addEventListener('input', () => {
+      if (currentKey === 'reject') {
+        bodyInput.value = buildRejectBody();
+        updateGmailLink();
+      }
+    });
+
+    [toInput, subjectInput, bodyInput].forEach((el) => el.addEventListener('input', updateGmailLink));
+
+    function flash(message: string) {
+      if (!status) return;
+      status.textContent = message;
+      window.setTimeout(() => {
+        if (status.textContent === message) status.textContent = '';
+      }, 2000);
+    }
+
+    async function copyText(text: string, label: string) {
+      try {
+        await navigator.clipboard.writeText(text);
+        flash(`${label} 복사됨`);
+      } catch {
+        flash('복사에 실패했습니다. 직접 선택해 복사하세요.');
+      }
+    }
+
+    document.querySelectorAll<HTMLElement>('[data-copy]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const target = document.getElementById(button.dataset.copy ?? '') as HTMLInputElement | HTMLTextAreaElement | null;
+        if (!target) return;
+        const label = { 'email-to': '받는 사람', 'email-subject': '제목', 'email-body': '본문' }[target.id] ?? '내용';
+        void copyText(target.value, label);
+      });
+    });
+
+    document.querySelector<HTMLElement>('[data-copy-all]')?.addEventListener('click', () => {
+      void copyText(`${subjectInput.value}\n\n${bodyInput.value}`, '제목과 본문');
+    });
+
+    fill(currentKey);
+  }
+</script>

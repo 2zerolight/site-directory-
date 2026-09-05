@@ -80,6 +80,16 @@ const statusBadgeClass = {
       {site.submitted_email && <p class="mt-1 text-xs text-slate-400">제출자: {site.submitted_email}</p>}
     </div>
     <div class="flex gap-2 shrink-0">
+      {/*
+        제출자에게 보낼 메일 문안(승인·거절·보완 요청 등)을 만드는 화면. 발송은
+        관리자가 지메일에서 직접 한다.
+      */}
+      <a
+        href={`/dashboard/email/${site.id}`}
+        class="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+      >
+        메일 작성
+      </a>
       {site.status !== 'approved' && (
         <form method="post">
           <input type="hidden" name="action" value="approve" />
@@ -137,7 +147,10 @@ const statusBadgeClass = {
                 onclick="this.select()"
                 class="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 font-mono text-xs text-slate-600"
               />
-              <p class="mt-1 text-xs text-slate-400">클릭하면 전체 선택됩니다. 해당 사이트 운영자에게만 전달하세요.</p>
+              <p class="mt-1 text-xs text-slate-400">
+                클릭하면 전체 선택됩니다. 해당 사이트 운영자에게만 전달하세요.
+                <a href={`/dashboard/email/${site.id}?type=verify_link`} class="underline hover:text-slate-600">안내 메일 문안</a>
+              </p>
             </div>
           )}
         </div>
