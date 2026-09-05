@@ -241,10 +241,6 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
     </a>
   )}
 
-  {site.cover_image_url && (
-    <img src={site.cover_image_url} alt={`${site.name} 대표 이미지`} class="w-full max-h-72 object-cover rounded-lg border border-slate-200 mb-6" loading="lazy" />
-  )}
-
   <div class="rounded-lg border border-slate-200 bg-white p-5 sm:p-6 md:p-8">
     <div class="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div class="flex min-w-0 items-start gap-3 sm:gap-4">
@@ -323,35 +319,63 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
       <p class="mt-6 text-slate-700 leading-relaxed whitespace-pre-line break-words">{site.description}</p>
     )}
 
-    {serviceChips.length > 0 && (
-      <div class="mt-6">
-        <h2 class="text-sm font-semibold text-slate-900">주요 서비스</h2>
-        <div class="mt-2 flex flex-wrap gap-2">
-          {serviceChips.map((chip) => (
-            <span class="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">{chip}</span>
-          ))}
-        </div>
-      </div>
-    )}
+    {/*
+      대표 이미지(보통 원본 사이트의 og:image)는 예전에 페이지 맨 위에 가로로 꽉 채워
+      깔았는데, 정보가 아닌 남의 홍보 배너가 제목보다 먼저 보이는 꼴이라 효과가 없었다.
+      지금은 주요 서비스·키워드 옆에 작은 미리보기로만 둔다.
+    */}
+    {(serviceChips.length > 0 || keywordChips.length > 0 || tags.length > 0 || site.cover_image_url) && (
+      <div class="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+        <div class="min-w-0 flex-1">
+          {serviceChips.length > 0 && (
+            <div>
+              <h2 class="text-sm font-semibold text-slate-900">주요 서비스</h2>
+              <div class="mt-2 flex flex-wrap gap-2">
+                {serviceChips.map((chip) => (
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">{chip}</span>
+                ))}
+              </div>
+            </div>
+          )}
 
-    {keywordChips.length > 0 && (
-      <div class="mt-4">
-        <h2 class="text-sm font-semibold text-slate-900">주요 키워드</h2>
-        <div class="mt-2 flex flex-wrap gap-2">
-          {keywordChips.map((chip) => (
-            <span class="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500">#{chip}</span>
-          ))}
-        </div>
-      </div>
-    )}
+          {keywordChips.length > 0 && (
+            <div class={serviceChips.length > 0 ? 'mt-4' : ''}>
+              <h2 class="text-sm font-semibold text-slate-900">주요 키워드</h2>
+              <div class="mt-2 flex flex-wrap gap-2">
+                {keywordChips.map((chip) => (
+                  <span class="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500">#{chip}</span>
+                ))}
+              </div>
+            </div>
+          )}
 
-    {tags.length > 0 && (
-      <div class="mt-4">
-        <div class="flex flex-wrap gap-2">
-          {tags.map((tag) => (
-            <a href={`/tag/${tag.slug}`} class="rounded-full bg-slate-900 px-3 py-1 text-xs text-white hover:bg-slate-700">#{tag.name}</a>
-          ))}
+          {tags.length > 0 && (
+            <div class={serviceChips.length > 0 || keywordChips.length > 0 ? 'mt-4' : ''}>
+              <div class="flex flex-wrap gap-2">
+                {tags.map((tag) => (
+                  <a href={`/tag/${tag.slug}`} class="rounded-full bg-slate-900 px-3 py-1 text-xs text-white hover:bg-slate-700">#{tag.name}</a>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
+
+        {site.cover_image_url && (
+          <a
+            href={`/go/${site.slug}`}
+            target="_blank"
+            rel="nofollow noopener noreferrer sponsored"
+            class="block w-full max-w-[14rem] shrink-0 sm:w-56"
+            title={`${site.name} 방문`}
+          >
+            <img
+              src={site.cover_image_url}
+              alt={`${site.name} 대표 이미지`}
+              class="aspect-[1200/630] w-full rounded-md border border-slate-200 bg-slate-50 object-cover"
+              loading="lazy"
+            />
+          </a>
+        )}
       </div>
     )}
 
