@@ -115,8 +115,9 @@ const action = String(data.get('action') ?? '');
         const params = new URLSearchParams({ indexnow: result.ok ? 'ok' : 'fail', n: String(paths.length) });
         if (!result.ok) {
           // 원인을 화면에 보여준다. "실패"만 띄우면 키 파일인지 429 인지 알 길이 없다.
-          if (result.status) params.set('status', String(result.status));
-          if (result.detail) params.set('detail', result.detail.slice(0, 200));
+          // 'status' 는 목록 탭 필터(status=pending 등)가 이미 쓰는 이름이라 겹치면 안 된다.
+          if (result.status) params.set('indexnow_status', String(result.status));
+          if (result.detail) params.set('indexnow_detail', result.detail.slice(0, 200));
         }
         return Astro.redirect(`${backTo}${sep}${params.toString()}`);
       }
@@ -240,8 +241,8 @@ const updateFailed = Astro.url.searchParams.get('error') === 'update';
 const deleteFailed = Astro.url.searchParams.get('error') === 'delete';
 const indexNowResult = Astro.url.searchParams.get('indexnow');
 const indexNowCount = Astro.url.searchParams.get('n');
-const indexNowStatus = Astro.url.searchParams.get('status');
-const indexNowDetail = Astro.url.searchParams.get('detail');
+const indexNowStatus = Astro.url.searchParams.get('indexnow_status');
+const indexNowDetail = Astro.url.searchParams.get('indexnow_detail');
 
 const singleSite = isAuthed && singleSiteId ? await getSiteById(env.DB, singleSiteId) : null;
 const listResult =
@@ -284,7 +285,11 @@ const tabs: { value: AdminSiteStatusFilter; label: string }[] = [
           <form method="post">
             <input type="hidden" name="action" value="indexnow_all" />
             <input type="hidden" name="redirectTo" value={currentQueryString} />
-            <button type="submit" class="text-slate-400 hover:text-slate-700 underline">IndexNow 전체 제출</button>
+            <button
+              type="submit"
+              title="사이트맵 전체를 IndexNow 에 보냅니다. 초기 시딩용이라 자주 누르면 429(요청 과다)가 납니다. 승인·수정 시 바뀐 URL 은 자동으로 보내집니다."
+              class="text-slate-400 hover:text-slate-700 underline"
+            >IndexNow 전체 제출</button>
           </form>
           <form method="post">
             <input type="hidden" name="action" value="logout" />
@@ -305,7 +310,11 @@ const tabs: { value: AdminSiteStatusFilter; label: string }[] = [
             ? `IndexNow 에 ${indexNowCount}개 URL 을 제출했습니다. Bing·네이버·Yandex 로 전달되며 구글은 참여하지 않습니다.`
             : `IndexNow 제출에 실패했습니다${indexNowStatus ? ` (HTTP ${indexNowStatus})` : ' (응답 없음)'}. ${
                 indexNowDetail ? `응답: ${indexNowDetail}` : '엣지에서 fetch 가 실패했습니다.'
-              } 429 면 잠시 뒤 다시, 403 이면 키 파일을 확인하세요.`}
+              } ${
+                indexNowStatus === '429'
+                  ? '요청 과다입니다. 전체 제출은 초기 시딩용이라 반복하면 이렇게 됩니다. 승인·수정 시 바뀐 URL 은 자동으로 보내지니 하루 이상 지난 뒤 필요할 때만 다시 누르세요.'
+                  : '403 이면 키 파일을 확인하세요.'
+              }`}
         </div>
       )}
 
