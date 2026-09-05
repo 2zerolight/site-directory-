@@ -28,7 +28,14 @@ export function indexNowKeyLocation(): string {
  * 사이트 승인·수정은 이미 DB 에 반영된 뒤에 부르므로, 알림이 실패했다고 그 작업을
  * 되돌릴 이유가 없다. 텔레그램 알림과 같은 방침이다.
  */
-export async function submitToIndexNow(paths: string[]): Promise<{ ok: boolean; status?: number }> {
+export interface IndexNowResult {
+  ok: boolean;
+  status?: number;
+  /** 실패했을 때 원인 파악용. IndexNow 는 4xx 에 JSON 으로 errorCode 와 message 를 준다. */
+  detail?: string;
+}
+
+export async function submitToIndexNow(paths: string[]): Promise<IndexNowResult> {
   const urlList = [...new Set(paths)]
     .map((path) => (path.startsWith('http') ? path : new URL(path, SITE_URL).toString()))
     .slice(0, MAX_URLS);
@@ -47,8 +54,11 @@ export async function submitToIndexNow(paths: string[]): Promise<{ ok: boolean; 
       }),
     });
     // 200 은 접수, 202 는 접수했으나 키 확인 대기. 둘 다 정상이다.
-    return { ok: response.ok, status: response.status };
-  } catch {
-    return { ok: false };
+    if (response.ok) return { ok: true, status: response.status };
+    const detail = (await response.text().catch(() => '')).slice(0, 300);
+    return { ok: false, status: response.status, detail };
+  } catch (err) {
+    // 엣지에서 fetch 자체가 실패한 경우. 상태 코드가 없으니 예외 메시지를 남긴다.
+    return { ok: false, detail: err instanceof Error ? err.message : String(err) };
   }
 }

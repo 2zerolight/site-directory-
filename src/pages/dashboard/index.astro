@@ -112,9 +112,13 @@ const action = String(data.get('action') ?? '');
         ];
         const result = await submitToIndexNow(paths);
         const sep = redirectTo.includes('?') ? '&' : '?';
-        return Astro.redirect(
-          `${backTo}${sep}indexnow=${result.ok ? 'ok' : 'fail'}&n=${paths.length}`
-        );
+        const params = new URLSearchParams({ indexnow: result.ok ? 'ok' : 'fail', n: String(paths.length) });
+        if (!result.ok) {
+          // 원인을 화면에 보여준다. "실패"만 띄우면 키 파일인지 429 인지 알 길이 없다.
+          if (result.status) params.set('status', String(result.status));
+          if (result.detail) params.set('detail', result.detail.slice(0, 200));
+        }
+        return Astro.redirect(`${backTo}${sep}${params.toString()}`);
       }
 
       if (action === 'bulk_move_category') {
@@ -236,6 +240,8 @@ const updateFailed = Astro.url.searchParams.get('error') === 'update';
 const deleteFailed = Astro.url.searchParams.get('error') === 'delete';
 const indexNowResult = Astro.url.searchParams.get('indexnow');
 const indexNowCount = Astro.url.searchParams.get('n');
+const indexNowStatus = Astro.url.searchParams.get('status');
+const indexNowDetail = Astro.url.searchParams.get('detail');
 
 const singleSite = isAuthed && singleSiteId ? await getSiteById(env.DB, singleSiteId) : null;
 const listResult =
@@ -297,7 +303,9 @@ const tabs: { value: AdminSiteStatusFilter; label: string }[] = [
         <div class={`mt-4 rounded-md border p-3 text-sm ${indexNowResult === 'ok' ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
           {indexNowResult === 'ok'
             ? `IndexNow 에 ${indexNowCount}개 URL 을 제출했습니다. Bing·네이버·Yandex 로 전달되며 구글은 참여하지 않습니다.`
-            : 'IndexNow 제출에 실패했습니다. 키 파일이 정상적으로 열리는지 확인해주세요.'}
+            : `IndexNow 제출에 실패했습니다${indexNowStatus ? ` (HTTP ${indexNowStatus})` : ' (응답 없음)'}. ${
+                indexNowDetail ? `응답: ${indexNowDetail}` : '엣지에서 fetch 가 실패했습니다.'
+              } 429 면 잠시 뒤 다시, 403 이면 키 파일을 확인하세요.`}
         </div>
       )}
 
