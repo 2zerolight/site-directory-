@@ -156,7 +156,7 @@ const statusBadgeClass = {
         </div>
       )}
 
-      <form method="post" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <form method="post" enctype="multipart/form-data" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <input type="hidden" name="action" value="update" />
         <input type="hidden" name="id" value={site.id} />
         <input type="hidden" name="redirectTo" value={redirectTo} />
@@ -172,6 +172,28 @@ const statusBadgeClass = {
               value={value ?? ''}
               class={adminInputClass}
             />
+            {formName === 'logoUrl' && (
+              <div class="mt-2 flex items-start gap-3">
+                {site.logo_url && (
+                  <img src={site.logo_url} alt="현재 로고" class="h-10 w-10 shrink-0 rounded-md border border-slate-200 bg-white object-contain" />
+                )}
+                <div class="min-w-0">
+                  <label class={adminLabelClass} for={`logoFile-${site.id}`}>또는 파일로 올리기</label>
+                  <input
+                    id={`logoFile-${site.id}`}
+                    name="logoFile"
+                    type="file"
+                    accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+                    class="mt-1 block w-full text-xs text-slate-600 file:mr-2 file:rounded-md file:border file:border-slate-300 file:bg-white file:px-2.5 file:py-1 file:text-xs file:font-medium file:text-slate-600"
+                  />
+                  <p class="mt-1 text-xs text-slate-400">
+                    이미지 주소가 외부 노출을 막는 사이트용입니다. PNG·JPG·GIF·WebP·SVG, 200KB 이하.
+                    파일을 고르면 위 주소 칸보다 우선하며, 저장하면 주소가 자동으로 바뀝니다.
+                    주소 칸을 직접 바꾸거나 비우면 올려둔 파일은 지워집니다.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         ))}
 

@@ -279,6 +279,39 @@ export async function deleteSite(db: D1Database, id: number): Promise<void> {
   await db.prepare('DELETE FROM sites WHERE id = ?').bind(id).run();
 }
 
+export interface SiteLogoRow {
+  content_type: string;
+  data_base64: string;
+  byte_size: number;
+}
+
+export async function getSiteLogo(db: D1Database, siteId: number): Promise<SiteLogoRow | null> {
+  const row = await db
+    .prepare('SELECT content_type, data_base64, byte_size FROM site_logos WHERE site_id = ?')
+    .bind(siteId)
+    .first<SiteLogoRow>();
+  return row ?? null;
+}
+
+export async function setSiteLogo(db: D1Database, siteId: number, contentType: string, base64: string, byteSize: number): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO site_logos (site_id, content_type, data_base64, byte_size, updated_at)
+       VALUES (?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(site_id) DO UPDATE SET
+         content_type = excluded.content_type,
+         data_base64 = excluded.data_base64,
+         byte_size = excluded.byte_size,
+         updated_at = excluded.updated_at`
+    )
+    .bind(siteId, contentType, base64, byteSize)
+    .run();
+}
+
+export async function deleteSiteLogo(db: D1Database, siteId: number): Promise<void> {
+  await db.prepare('DELETE FROM site_logos WHERE site_id = ?').bind(siteId).run();
+}
+
 export async function searchSites(db: D1Database, query: string, limit = 30): Promise<SiteWithCategory[]> {
   const like = `%${query}%`;
   const { results } = await db

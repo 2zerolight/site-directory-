@@ -16,10 +16,13 @@ import {
   deleteSite,
   getSitemapData,
   setSiteTags,
+  setSiteLogo,
+  deleteSiteLogo,
   bulkMoveCategory,
   type AdminSiteStatusFilter,
 } from '../../lib/db';
 import { normalizeRequiredUrl, normalizeOptionalUrl } from '../../lib/urls';
+import { readLogoUpload, ownLogoPath, OWN_LOGO_PATH, LOGO_ERROR_MESSAGES } from '../../lib/logo-upload';
 import { ADMIN_COOKIE_NAME, createSessionCookieValue, isValidSessionCookieValue } from '../../lib/auth';
 
 const adminPassword = env.ADMIN_PASSWORD;
@@ -162,7 +165,25 @@ const action = String(data.get('action') ?? '');
         const subcategoryId = get('subcategoryId') ? Number(get('subcategoryId')) : null;
 
         const normalizedUrl = normalizeRequiredUrl(get('url'));
-        const logo = normalizeOptionalUrl(get('logoUrl'));
+
+        /*
+          로고는 세 갈래다. 파일을 올렸으면 그 파일이 우선이고, 업로드한 로고를 가리키는
+          주소(/logo/..)를 그대로 두고 저장하면 유지하고, 그 밖의 주소나 빈 칸이면 외부
+          주소로 보고 예전에 올려둔 파일은 지운다.
+        */
+        const typedLogo = get('logoUrl');
+        const logoFile = data.get('logoFile');
+        const upload = logoFile instanceof File && logoFile.size > 0 ? await readLogoUpload(logoFile) : null;
+        if (upload && !upload.ok) {
+          const sep = redirectTo.includes('?') ? '&' : '?';
+          return Astro.redirect(`${backTo}${sep}error=logo-${upload.error}#site-${id}`);
+        }
+        const keepsOwnLogo = !upload && OWN_LOGO_PATH.test(typedLogo);
+        const logo: { ok: boolean; value: string | null } = upload
+          ? { ok: true, value: ownLogoPath(id) }
+          : keepsOwnLogo
+            ? { ok: true, value: typedLogo }
+            : normalizeOptionalUrl(typedLogo);
         const cover = normalizeOptionalUrl(get('coverImageUrl'));
         const blog = normalizeOptionalUrl(get('blogUrl'));
         const youtube = normalizeOptionalUrl(get('youtubeUrl'));
@@ -185,6 +206,11 @@ const action = String(data.get('action') ?? '');
           otherSns.ok;
 
         if (valid) {
+          if (upload?.ok) {
+            await setSiteLogo(env.DB, id, upload.contentType, upload.base64, upload.byteSize);
+          } else if (!keepsOwnLogo) {
+            await deleteSiteLogo(env.DB, id);
+          }
           await updateSiteFields(env.DB, id, {
             name,
             url: normalizedUrl!.toString(),
@@ -239,6 +265,11 @@ const categories = isAuthed ? await getCategories(env.DB) : [];
 const subcategories = isAuthed ? await getAllSubcategories(env.DB) : [];
 const updateFailed = Astro.url.searchParams.get('error') === 'update';
 const deleteFailed = Astro.url.searchParams.get('error') === 'delete';
+const logoErrorKey = Astro.url.searchParams.get('error')?.replace(/^logo-/, '');
+const logoErrorMessage =
+  Astro.url.searchParams.get('error')?.startsWith('logo-') && logoErrorKey && logoErrorKey in LOGO_ERROR_MESSAGES
+    ? LOGO_ERROR_MESSAGES[logoErrorKey as keyof typeof LOGO_ERROR_MESSAGES]
+    : null;
 const indexNowResult = Astro.url.searchParams.get('indexnow');
 const indexNowCount = Astro.url.searchParams.get('n');
 const indexNowStatus = Astro.url.searchParams.get('indexnow_status');
@@ -301,6 +332,12 @@ const tabs: { value: AdminSiteStatusFilter; label: string }[] = [
       {updateFailed && (
         <div class="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           수정 내용을 저장하지 못했습니다. 필수 항목(이름·URL·한 줄 소개·상세 설명·대분류)과 URL 형식을 확인해주세요.
+        </div>
+      )}
+
+      {logoErrorMessage && (
+        <div class="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          수정 내용을 저장하지 않았습니다. {logoErrorMessage}
         </div>
       )}
 

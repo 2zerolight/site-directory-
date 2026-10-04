@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS site_logos;
 DROP TABLE IF EXISTS site_tags;
 DROP TABLE IF EXISTS tags;
 DROP TABLE IF EXISTS sites;
@@ -102,6 +103,14 @@ CREATE TABLE site_tags (
   site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
   tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
   PRIMARY KEY (site_id, tag_id)
+);
+
+CREATE TABLE site_logos (
+  site_id INTEGER PRIMARY KEY REFERENCES sites(id) ON DELETE CASCADE,
+  content_type TEXT NOT NULL,
+  data_base64 TEXT NOT NULL,
+  byte_size INTEGER NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE reviews (
