@@ -2,6 +2,7 @@
 import { env } from 'cloudflare:workers';
 import Layout from '../../layouts/Layout.astro';
 import SiteCard from '../../components/SiteCard.astro';
+import AdBanner from '../../components/AdBanner.astro';
 import {
   getCategoryBySlug,
   getSubcategoriesByCategory,
@@ -195,7 +196,14 @@ const jsonLd = [itemListJsonLd, breadcrumbJsonLd];
     <p class="mt-10 text-slate-400">아직 등록된 사이트가 없습니다. 첫 번째로 <a href="/submit" class="underline">사이트를 등록</a>해보세요.</p>
   ) : (
     <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {sites.map((site) => <SiteCard site={site} showCategory={false} />)}
+      {sites.map((site, i) => (
+        <>
+          {i === 12 && (
+            <AdBanner class="col-span-full" />
+          )}
+          <SiteCard site={site} showCategory={false} />
+        </>
+      ))}
     </div>
   )}
 

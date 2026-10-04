@@ -2,6 +2,7 @@
 import { env } from 'cloudflare:workers';
 import Layout from '../../layouts/Layout.astro';
 import SiteCard from '../../components/SiteCard.astro';
+import AdBanner from '../../components/AdBanner.astro';
 import {
   getSiteBySlug,
   getRelatedSites,
@@ -501,6 +502,8 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
       </div>
     )}
   </div>
+
+  <AdBanner class="mt-10" />
 
   {showComparison && (
     <section class="mt-10">

@@ -1,0 +1,43 @@
+---
+/*
+  직접 판매 배너. 소재는 public/ads/ 에 둔다.
+
+  - wide: 1152x150. 컨테이너가 1120px 인 lg(1024px) 이상에서만 보인다. 그보다 좁으면
+    글자가 너무 작아져서 같은 자리에 300x250 으로 바꿔 보여준다.
+  - rail: 300x250. 가이드 우측 레일처럼 폭이 300px 로 고정된 자리.
+
+  소재는 사이트다가 직접 판매하는 광고라 애드센스 단위가 아니다. 링크는 sponsored,
+  위에 "광고" 표시를 붙인다.
+*/
+interface Props {
+  variant?: 'wide' | 'rail';
+  class?: string;
+}
+const { variant = 'wide', class: className = '' } = Astro.props;
+
+const HREF = 'https://doloffer.kr';
+const ALT = '돌오퍼 구독료 최대 76% 할인';
+const REL = 'sponsored nofollow noopener noreferrer';
+const imgClass = 'rounded-md border border-slate-200';
+---
+
+<aside data-ad aria-label="광고" class={className}>
+  {variant === 'wide' ? (
+    <>
+      <p class="mx-auto mb-1 w-[300px] text-left text-[11px] leading-none text-slate-400 lg:w-full lg:max-w-[1152px]">광고</p>
+      <a href={HREF} target="_blank" rel={REL} class="mx-auto hidden max-w-[1152px] lg:block">
+        <img src="/ads/doloffer-1152x150.gif" width="1152" height="150" alt={ALT} class={`h-auto w-full ${imgClass}`} loading="lazy" />
+      </a>
+      <a href={HREF} target="_blank" rel={REL} class="mx-auto block w-[300px] lg:hidden">
+        <img src="/ads/doloffer-300x250.gif" width="300" height="250" alt={ALT} class={imgClass} loading="lazy" />
+      </a>
+    </>
+  ) : (
+    <>
+      <p class="mb-1 text-left text-[11px] leading-none text-slate-400">광고</p>
+      <a href={HREF} target="_blank" rel={REL} class="block w-[300px]">
+        <img src="/ads/doloffer-300x250.gif" width="300" height="250" alt={ALT} class={imgClass} loading="lazy" />
+      </a>
+    </>
+  )}
+</aside>
