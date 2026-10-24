@@ -1,4 +1,4 @@
-import type { Category, CategoryWithCount, Review, ReviewStatus, ReviewWithSite, Site, SiteWithCategory, Subcategory, Tag } from '../types';
+import type { Category, CategoryWithCount, Review, ReviewStatus, ReviewWithSite, Site, SiteEditRequestWithSite, SiteWithCategory, Subcategory, Tag } from '../types';
 
 const PAGE_SIZE = 24;
 export { PAGE_SIZE };
@@ -1011,3 +1011,145 @@ export async function getStaleApprovedSites(db: D1Database, limit = 20): Promise
 }
 
 export { type Site };
+
+
+/* ---------- 사이트 수정 신청 ---------- */
+
+/** 같은 도메인(www 무시)으로 이미 있는 사이트. 거절된 건은 재등록을 허용하므로 제외한다. */
+export async function findLiveSiteByHost(db: D1Database, hostname: string): Promise<SiteWithCategory | null> {
+  const normalized = hostname.toLowerCase().replace(/^www\./, '');
+  const { results } = await db
+    .prepare(
+      `SELECT ${SITE_WITH_CATEGORY_SELECT} ${SITE_WITH_CATEGORY_JOIN}
+       WHERE s.status IN ('approved', 'pending')
+         AND REPLACE(LOWER(s.url), '://www.', '://') LIKE '%://' || ? || '%'
+       ORDER BY s.status = 'approved' DESC`
+    )
+    .bind(normalized)
+    .all<SiteWithCategory>();
+  // LIKE 는 접두 일치라 example.com 이 example.com.au 에도 걸린다. 호스트가 정확히 같은 것만 남긴다.
+  return (
+    results.find((row) => {
+      try {
+        return new URL(row.url).hostname.toLowerCase().replace(/^www\./, '') === normalized;
+      } catch {
+        return false;
+      }
+    }) ?? null
+  );
+}
+
+export interface EditRequestInput {
+  siteId: number;
+  requesterEmail: string;
+  emailVerified: boolean;
+  changes: Record<string, string>;
+  note: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+}
+
+/** 같은 사이트에 같은 이메일로 대기 중인 신청이 있으면 내용을 덮어쓰고, 없으면 새로 만든다. */
+export async function upsertEditRequest(db: D1Database, data: EditRequestInput): Promise<number> {
+  const pending = await db
+    .prepare(
+      `SELECT id FROM site_edit_requests
+       WHERE site_id = ? AND status = 'pending' AND LOWER(requester_email) = LOWER(?)
+       ORDER BY id DESC LIMIT 1`
+    )
+    .bind(data.siteId, data.requesterEmail)
+    .first<{ id: number }>();
+
+  if (pending) {
+    await db
+      .prepare(
+        `UPDATE site_edit_requests
+         SET changes_json = ?, note = ?, email_verified = ?, ip_address = ?, user_agent = ?, created_at = datetime('now')
+         WHERE id = ?`
+      )
+      .bind(JSON.stringify(data.changes), data.note, data.emailVerified ? 1 : 0, data.ipAddress, data.userAgent, pending.id)
+      .run();
+    return pending.id;
+  }
+
+  const result = await db
+    .prepare(
+      `INSERT INTO site_edit_requests
+         (site_id, requester_email, email_verified, changes_json, note, ip_address, user_agent)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      data.siteId,
+      data.requesterEmail,
+      data.emailVerified ? 1 : 0,
+      JSON.stringify(data.changes),
+      data.note,
+      data.ipAddress,
+      data.userAgent
+    )
+    .run();
+  return Number(result.meta.last_row_id);
+}
+
+export async function countRecentEditRequestsByIp(db: D1Database, ip: string, minutes: number): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM site_edit_requests
+       WHERE ip_address = ? AND created_at >= datetime('now', ?)`
+    )
+    .bind(ip, `-${minutes} minutes`)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+export async function countPendingEditRequestsForSite(db: D1Database, siteId: number): Promise<number> {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM site_edit_requests WHERE site_id = ? AND status = 'pending'`)
+    .bind(siteId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+export async function countPendingEditRequests(db: D1Database): Promise<number> {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM site_edit_requests WHERE status = 'pending'`)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+export type AdminEditStatusFilter = 'pending' | 'applied' | 'rejected' | 'all';
+
+const EDIT_REQUEST_SELECT = `r.*, s.name AS site_name, s.slug AS site_slug, s.url AS site_url,
+  s.status AS site_status, s.submitted_email AS site_submitted_email`;
+
+export async function getEditRequests(db: D1Database, status: AdminEditStatusFilter): Promise<SiteEditRequestWithSite[]> {
+  const where = status === 'all' ? '' : 'WHERE r.status = ?';
+  const stmt = db.prepare(
+    `SELECT ${EDIT_REQUEST_SELECT} FROM site_edit_requests r JOIN sites s ON s.id = r.site_id
+     ${where} ORDER BY r.created_at DESC, r.id DESC LIMIT 200`
+  );
+  const { results } = await (status === 'all' ? stmt : stmt.bind(status)).all<SiteEditRequestWithSite>();
+  return results;
+}
+
+export async function getEditRequestById(db: D1Database, id: number): Promise<SiteEditRequestWithSite | null> {
+  const row = await db
+    .prepare(`SELECT ${EDIT_REQUEST_SELECT} FROM site_edit_requests r JOIN sites s ON s.id = r.site_id WHERE r.id = ?`)
+    .bind(id)
+    .first<SiteEditRequestWithSite>();
+  return row ?? null;
+}
+
+export async function resolveEditRequest(db: D1Database, id: number, status: 'applied' | 'rejected'): Promise<void> {
+  await db
+    .prepare(`UPDATE site_edit_requests SET status = ?, resolved_at = datetime('now') WHERE id = ? AND status = 'pending'`)
+    .bind(status, id)
+    .run();
+}
+
+export async function setSiteSubmittedEmail(db: D1Database, siteId: number, email: string): Promise<void> {
+  await db
+    .prepare(`UPDATE sites SET submitted_email = ?, updated_at = datetime('now') WHERE id = ?`)
+    .bind(email, siteId)
+    .run();
+}

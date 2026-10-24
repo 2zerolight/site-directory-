@@ -1,6 +1,14 @@
 import type { APIRoute } from 'astro';
 import { env } from 'cloudflare:workers';
-import { getSiteById, setSiteStatus, checkSiteHealth } from '../../../lib/db';
+import {
+  getSiteById,
+  setSiteStatus,
+  checkSiteHealth,
+  getEditRequestById,
+  resolveEditRequest,
+} from '../../../lib/db';
+import { applyEditRequest } from '../../../lib/site-edit';
+import { submitToIndexNow } from '../../../lib/indexnow';
 import {
   readTelegramConfig,
   answerCallback,
@@ -63,6 +71,53 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   const [action, rawId] = String(cq.data ?? '').split(':');
+
+  // 수정 신청 버튼. 사이트 승인과 id 의 뜻이 다르므로(신청 id) 먼저 갈라서 처리한다.
+  if (action === 'edit_apply' || action === 'edit_reject') {
+    const requestId = Number(rawId);
+    if (!Number.isInteger(requestId) || requestId <= 0) return OK();
+
+    const request = await getEditRequestById(env.DB, requestId);
+    if (!request) {
+      await answerCallback(config, cq.id, '수정 신청을 찾을 수 없습니다.');
+      return OK();
+    }
+    if (request.status !== 'pending') {
+      const label = request.status === 'applied' ? '반영' : '거절';
+      await answerCallback(config, cq.id, `이미 ${label} 처리된 신청입니다.`);
+      return OK();
+    }
+
+    let resultLine: string;
+    if (action === 'edit_apply') {
+      const result = await applyEditRequest(env.DB, requestId);
+      if (!result.ok) {
+        await answerCallback(config, cq.id, '반영하지 못했습니다. 관리자 화면에서 확인해주세요.');
+        return OK();
+      }
+      if (result.site.status === 'approved') {
+        // 반영은 이미 끝났으므로 색인 알림이 실패해도 되돌리지 않는다.
+        try {
+          await submitToIndexNow([`/site/${result.site.slug}`]);
+        } catch {
+          // 알림은 부가 기능이다.
+        }
+      }
+      resultLine = `✅ <b>반영됨</b> · ${escapeTelegramHtml(formatKst())}`;
+    } else {
+      await resolveEditRequest(env.DB, requestId, 'rejected');
+      resultLine = `❌ <b>거절됨</b> · ${escapeTelegramHtml(formatKst())}`;
+    }
+
+    await answerCallback(config, cq.id, action === 'edit_apply' ? '반영했습니다.' : '거절했습니다.');
+    const chatId = cq.message?.chat?.id;
+    const messageId = cq.message?.message_id;
+    if (chatId && messageId) {
+      await markHandled(config, chatId, messageId, escapeTelegramHtml(cq.message?.text ?? ''), resultLine);
+    }
+    return OK();
+  }
+
   const siteId = Number(rawId);
   if ((action !== 'approve' && action !== 'reject') || !Number.isInteger(siteId) || siteId <= 0) {
     return OK();

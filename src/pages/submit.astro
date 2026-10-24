@@ -2,7 +2,8 @@
 import { env } from 'cloudflare:workers';
 import Layout from '../layouts/Layout.astro';
 import FormSection from '../components/FormSection.astro';
-import { getCategories, getAllSubcategories, insertSiteSubmission } from '../lib/db';
+import { getCategories, getAllSubcategories, insertSiteSubmission, findLiveSiteByHost } from '../lib/db';
+import { isValidEmail } from '../lib/site-edit';
 import { slugify } from '../lib/slugify';
 import { generateVerificationToken, generateVerificationSecret } from '../lib/verify';
 import { normalizeRequiredUrl, normalizeOptionalUrl } from '../lib/urls';
@@ -62,6 +63,7 @@ let errorMessage = '';
 let formValues: FormValues = emptyValues;
 let redirectSlug = '';
 let redirectSecret = '';
+let redirectEditSlug = '';
 
 if (Astro.request.method === 'POST') {
   const data = await Astro.request.formData();
@@ -95,6 +97,11 @@ if (Astro.request.method === 'POST') {
   const facebook = normalizeOptionalUrl(formValues.facebookUrl);
   const otherSns = normalizeOptionalUrl(formValues.otherSnsUrl);
 
+  // 같은 도메인이 이미 노출 중이면 새로 등록하지 않고 수정 신청으로 보낸다. 대기 중인 것은
+  // 이미 접수된 건이라 막는다(같은 사이트가 연달아 두 번 접수되는 일이 있었다). 거절된 것은
+  // 사유를 고쳐 다시 등록하라고 안내하므로 막지 않는다.
+  const existingSite = honeypot || !normalizedUrl ? null : await findLiveSiteByHost(env.DB, normalizedUrl.hostname);
+
   if (honeypot) {
     // Silently accept bots without writing anything, so they don't learn to adapt.
     redirectSlug = '__bot__';
@@ -102,6 +109,12 @@ if (Astro.request.method === 'POST') {
     errorMessage = '사이트 이름을 입력해주세요 (100자 이내).';
   } else if (!normalizedUrl) {
     errorMessage = '올바른 사이트 URL을 입력해주세요 (예: example.com).';
+  } else if (existingSite?.status === 'approved') {
+    redirectEditSlug = existingSite.slug;
+  } else if (existingSite) {
+    errorMessage = '이미 접수되어 검토 중인 사이트입니다. 승인되면 디렉토리에 노출되며, 정보를 바꾸려면 승인 뒤에 수정 신청을 이용해주세요.';
+  } else if (!isValidEmail(formValues.email)) {
+    errorMessage = '연락용 이메일을 올바르게 입력해주세요. 수정 신청 때 본인 확인에 쓰입니다.';
   } else if (!formValues.tagline || formValues.tagline.length > 120) {
     errorMessage = '한 줄 소개를 입력해주세요 (120자 이내).';
   } else if (!formValues.description || formValues.description.length > 2000) {
@@ -188,6 +201,9 @@ if (Astro.request.method === 'POST') {
 
 if (redirectSlug === '__bot__') {
   return Astro.redirect('/submit');
+}
+if (redirectEditSlug) {
+  return Astro.redirect(`/site/${encodeURIComponent(redirectEditSlug)}/edit?from=submit`);
 }
 if (redirectSlug) {
   // 제출한 사람만 이 주소를 안다. slug 로 주소를 잡으면 sitemap 에 다 실려 있어
@@ -415,10 +431,11 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
         </div>
       </FormSection>
 
-      <FormSection index={6} title="제출자 연락처" description="검수 관련 안내를 받을 연락처입니다. 사이트에는 노출되지 않습니다.">
+      <FormSection index={6} title="제출자 연락처" description="검수 안내를 받고, 나중에 정보를 고칠 때 본인 확인에 쓰는 이메일입니다. 사이트에는 노출되지 않습니다.">
         <div>
-          <label class={labelClass} for="email"><span>연락용 이메일 (선택)</span></label>
-          <input id="email" name="email" type="email" value={formValues.email} class={inputClass} />
+          <label class={labelClass} for="email"><span>연락용 이메일<span class="ml-0.5 text-rose-500">*</span></span></label>
+          <input id="email" name="email" type="email" required autocomplete="email" value={formValues.email} class={inputClass} />
+          <p class={hintClass}>등록 후 정보를 수정하려면 이 이메일이 필요합니다. 정확히 입력해주세요.</p>
         </div>
 
         {/*
@@ -594,7 +611,6 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
     });
 
     const duplicateWarning = document.getElementById('duplicate-warning');
-    const statusLabels: Record<string, string> = { approved: '이미 등록된', pending: '승인 대기 중인', rejected: '이전에 거절된' };
 
     function escapeHtml(s: string): string {
       const div = document.createElement('div');
@@ -612,12 +628,18 @@ const hintClass = 'mt-1.5 text-xs text-slate-400';
       try {
         const res = await fetch(`/api/check-duplicate?url=${encodeURIComponent(url)}`);
         const data = (await res.json()) as { exists: boolean; name?: string; slug?: string; status?: string };
-        if (data.exists && data.slug && data.name) {
-          const label = statusLabels[data.status ?? ''] ?? '등록된';
-          duplicateWarning.innerHTML = `⚠ ${label} 사이트예요: <a href="/site/${encodeURIComponent(data.slug)}" target="_blank" class="underline">${escapeHtml(data.name)} 보기</a>. 그래도 새로 등록할 수 있어요.`;
-          duplicateWarning.classList.remove('hidden');
+        if (data.exists && data.status === 'approved' && data.slug && data.name) {
+          // 이미 노출 중이면 새로 등록하는 길을 막고 수정 신청으로 보낸다.
+          duplicateWarning.className = 'mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800';
+          duplicateWarning.innerHTML = `이미 등록된 사이트예요: <a href="/site/${encodeURIComponent(data.slug)}" target="_blank" class="underline">${escapeHtml(data.name)}</a>. 새로 등록하지 말고 <a href="/site/${encodeURIComponent(data.slug)}/edit" class="font-semibold underline">정보 수정 신청</a>을 이용해주세요.`;
+        } else if (data.exists && data.status === 'pending') {
+          duplicateWarning.className = 'mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800';
+          duplicateWarning.textContent = '이미 접수되어 검토 중인 사이트예요. 승인되면 디렉토리에 노출됩니다.';
+        } else if (data.exists && data.status === 'rejected') {
+          duplicateWarning.className = 'mt-1.5 text-xs text-amber-600';
+          duplicateWarning.textContent = '이전에 거절된 사이트예요. 사유를 고쳐 다시 등록할 수 있어요.';
         } else {
-          duplicateWarning.classList.add('hidden');
+          duplicateWarning.className = 'mt-1.5 hidden text-xs text-amber-600';
         }
       } catch {
         duplicateWarning.classList.add('hidden');

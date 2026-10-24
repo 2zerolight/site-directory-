@@ -128,6 +128,70 @@ export async function notifyNewSubmission(
   });
 }
 
+export type EditEmailState = 'verified' | 'unverified' | 'no_registered_email';
+
+export interface EditRequestNotice {
+  id: number;
+  siteName: string;
+  siteUrl: string;
+  requesterEmail: string;
+  emailState: EditEmailState;
+  /** 라벨과 현재 값, 요청 값. 화면에 보여줄 문자열로 이미 변환돼 있다. */
+  changes: { label: string; from: string; to: string }[];
+  note: string | null;
+}
+
+export function buildEditRequestMessage(n: EditRequestNotice): string {
+  const emailLine = {
+    verified: `✅ 등록 이메일과 <b>일치</b>`,
+    unverified: `⚠️ <b>등록 이메일과 다름</b>`,
+    no_registered_email: `ℹ️ 사이트에 등록된 이메일이 <b>없음</b>`,
+  }[n.emailState];
+
+  const rows: string[] = [
+    `<b>사이트 수정 신청</b>`,
+    ``,
+    `<b>${esc(n.siteName)}</b>`,
+    esc(n.siteUrl),
+    ``,
+    `신청자: ${esc(n.requesterEmail)}`,
+    emailLine,
+    ``,
+    `<b>변경 ${n.changes.length}개</b>`,
+  ];
+
+  const MAX_LINES = 10;
+  for (const change of n.changes.slice(0, MAX_LINES)) {
+    rows.push(`• <b>${esc(change.label)}</b>: ${esc(truncate(change.from, 60))} → ${esc(truncate(change.to, 100))}`);
+  }
+  if (n.changes.length > MAX_LINES) rows.push(`… 외 ${n.changes.length - MAX_LINES}개 (관리자 화면에서 확인)`);
+
+  if (n.note) rows.push(``, `<i>메모: ${esc(truncate(n.note, 300))}</i>`);
+  return rows.join('\n');
+}
+
+function editKeyboard(requestId: number) {
+  return {
+    inline_keyboard: [
+      [
+        { text: '✅ 반영', callback_data: `edit_apply:${requestId}` },
+        { text: '❌ 거절', callback_data: `edit_reject:${requestId}` },
+      ],
+      [{ text: '🔎 수정 신청 보기', url: new URL(`/dashboard/edits#req-${requestId}`, SITE_URL).toString() }],
+    ],
+  };
+}
+
+export async function notifyEditRequest(config: TelegramConfig, notice: EditRequestNotice): Promise<void> {
+  await call(config.botToken, 'sendMessage', {
+    chat_id: config.chatId,
+    text: buildEditRequestMessage(notice),
+    parse_mode: 'HTML',
+    link_preview_options: { is_disabled: true },
+    reply_markup: editKeyboard(notice.id),
+  });
+}
+
 /** 버튼을 누른 사람에게 뜨는 짧은 안내. 이걸 보내야 버튼의 로딩 표시가 멈춘다. */
 export async function answerCallback(
   config: TelegramConfig,

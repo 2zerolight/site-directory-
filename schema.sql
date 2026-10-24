@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS site_edit_requests;
 DROP TABLE IF EXISTS site_logos;
 DROP TABLE IF EXISTS site_tags;
 DROP TABLE IF EXISTS tags;
@@ -112,6 +113,23 @@ CREATE TABLE site_logos (
   byte_size INTEGER NOT NULL,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE site_edit_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+  requester_email TEXT NOT NULL,
+  email_verified INTEGER NOT NULL DEFAULT 0,
+  changes_json TEXT NOT NULL,
+  note TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'applied', 'rejected')),
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at TEXT
+);
+
+CREATE INDEX idx_site_edit_requests_status ON site_edit_requests(status, created_at);
+CREATE INDEX idx_site_edit_requests_site ON site_edit_requests(site_id, status);
 
 CREATE TABLE reviews (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

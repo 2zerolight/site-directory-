@@ -15,6 +15,7 @@ import {
   getSiteById,
   deleteSite,
   getSitemapData,
+  countPendingEditRequests,
   setSiteTags,
   setSiteLogo,
   deleteSiteLogo,
@@ -261,6 +262,7 @@ const status: AdminSiteStatusFilter = (['pending', 'approved', 'rejected', 'all'
 const searchQuery = Astro.url.searchParams.get('q') ?? '';
 const singleSiteId = Number(Astro.url.searchParams.get('site') || '');
 
+const pendingEditCount = isAuthed ? await countPendingEditRequests(env.DB) : 0;
 const categories = isAuthed ? await getCategories(env.DB) : [];
 const subcategories = isAuthed ? await getAllSubcategories(env.DB) : [];
 const updateFailed = Astro.url.searchParams.get('error') === 'update';
@@ -313,6 +315,9 @@ const tabs: { value: AdminSiteStatusFilter; label: string }[] = [
         <div class="flex items-center gap-4 text-sm">
           <a href="/dashboard/stats" class="text-slate-400 underline hover:text-slate-700">통계</a>
           <a href="/dashboard/reviews" class="text-slate-400 underline hover:text-slate-700">리뷰 관리</a>
+          <a href="/dashboard/edits" class="text-slate-400 underline hover:text-slate-700">
+            수정 신청{pendingEditCount > 0 && <span class="ml-1 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-medium text-white no-underline">{pendingEditCount}</span>}
+          </a>
           <form method="post">
             <input type="hidden" name="action" value="indexnow_all" />
             <input type="hidden" name="redirectTo" value={currentQueryString} />

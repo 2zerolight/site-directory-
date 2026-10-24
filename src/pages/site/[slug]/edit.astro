@@ -1,0 +1,407 @@
+---
+import { env } from 'cloudflare:workers';
+import Layout from '../../../layouts/Layout.astro';
+import FormSection from '../../../components/FormSection.astro';
+import {
+  getSiteBySlug,
+  getCategories,
+  getAllSubcategories,
+  upsertEditRequest,
+  countRecentEditRequestsByIp,
+  countPendingEditRequestsForSite,
+} from '../../../lib/db';
+import { renderNotFound } from '../../../lib/not-found';
+import { CONTACT_EMAIL } from '../../../lib/site';
+import { REGIONS, SITE_TYPES, PLATFORMS } from '../../../lib/constants';
+import { readTelegramConfig, notifyEditRequest, type EditEmailState } from '../../../lib/telegram';
+import {
+  EDIT_KEYS,
+  EDIT_LABELS,
+  siteFieldValues,
+  parseEditForm,
+  computeChanges,
+  displayValue,
+  isValidEmail,
+  sameEmail,
+  maskEmail,
+  type EditKey,
+  type EditValues,
+} from '../../../lib/site-edit';
+import type { Category, Subcategory } from '../../../types';
+
+/*
+  사이트 수정 신청.
+
+  등록된 사이트의 운영자가 정보를 고치고 싶을 때 쓰는 페이지다. 신청은 바로 반영되지 않고
+  달라진 항목만 저장돼 관리자에게 알림이 간다. 반영은 관리자가 한다.
+
+  이메일 확인은 두 갈래다.
+    - 사이트에 등록된 이메일이 있으면: 그 이메일을 입력해야 폼이 열린다.
+    - 없으면: 확인 없이 신청을 받되 "미확인"으로 표시한다. 운영자는 메일로 알려 달라고 안내한다.
+
+  메일을 보내는 확인이 아니라 "등록 때 적은 이메일을 아는가"를 보는 약한 확인이다. 이메일
+  주소는 비밀이 아니므로 신청 자체를 믿지 않고 반영은 항상 관리자가 diff 를 보고 한다.
+  이 확인은 폼을 여는 단계와 제출 단계에서 서버가 두 번 한다. 숨은 필드의 값은 조작할 수
+  있으므로 제출 때 다시 대조한다.
+*/
+Astro.response.headers.set('Cache-Control', 'no-store');
+
+const { slug } = Astro.params;
+const site = slug ? await getSiteBySlug(env.DB, slug) : null;
+if (!site || site.status !== 'approved') {
+  return renderNotFound(Astro);
+}
+
+const categories = await getCategories(env.DB);
+const subcategories = await getAllSubcategories(env.DB);
+
+const registeredEmail = site.submitted_email;
+const hasRegisteredEmail = Boolean(registeredEmail);
+const sent = Astro.url.searchParams.get('sent') === '1';
+const fromSubmit = Astro.url.searchParams.get('from') === 'submit';
+
+const IP_LIMIT = 5;
+const IP_WINDOW_MINUTES = 60;
+const PENDING_LIMIT_PER_SITE = 20;
+
+let step: 'email' | 'form' = hasRegisteredEmail ? 'email' : 'form';
+let errorMessage = '';
+let enteredEmail = '';
+let formValues: EditValues = siteFieldValues(site);
+let note = '';
+
+if (Astro.request.method === 'POST') {
+  const data = await Astro.request.formData();
+  const get = (key: string) => String(data.get(key) ?? '').trim();
+  const action = get('step');
+  enteredEmail = get('email');
+  note = get('note');
+
+  if (get('website')) {
+    // 봇은 아무것도 저장하지 않고 성공한 것처럼 돌려보낸다.
+    return Astro.redirect(`/site/${encodeURIComponent(site.slug)}/edit?sent=1`);
+  }
+
+  const emailMatches = hasRegisteredEmail && sameEmail(registeredEmail, enteredEmail);
+
+  if (!isValidEmail(enteredEmail)) {
+    errorMessage = '올바른 이메일 주소를 입력해주세요.';
+  } else if (action === 'verify') {
+    if (emailMatches) {
+      step = 'form';
+    } else {
+      errorMessage = '등록된 이메일과 다릅니다. 등록할 때 입력한 이메일을 다시 확인해주세요.';
+    }
+  } else if (action === 'submit') {
+    if (hasRegisteredEmail && !emailMatches) {
+      errorMessage = '등록된 이메일과 다릅니다. 등록할 때 입력한 이메일을 다시 확인해주세요.';
+    } else {
+      step = 'form';
+      // 오류가 나면 입력한 값을 그대로 다시 보여준다.
+      for (const key of EDIT_KEYS) formValues[key] = get(key);
+
+      const parsed = parseEditForm(get, categories, subcategories);
+      let ip: string | null = null;
+      try {
+        ip = Astro.clientAddress;
+      } catch {
+        ip = null;
+      }
+
+      if (!parsed.ok) {
+        errorMessage = parsed.error;
+      } else if (note.length > 500) {
+        errorMessage = '전달할 메모는 500자 이내로 적어주세요.';
+      } else {
+        const changes = computeChanges(site, parsed.values);
+        const changedKeys = Object.keys(changes) as EditKey[];
+        if (changedKeys.length === 0) {
+          errorMessage = '변경된 내용이 없습니다. 고치실 항목을 수정한 뒤 신청해주세요.';
+        } else if (ip && (await countRecentEditRequestsByIp(env.DB, ip, IP_WINDOW_MINUTES)) >= IP_LIMIT) {
+          errorMessage = '짧은 시간에 신청이 너무 많습니다. 잠시 뒤에 다시 시도해주세요.';
+        } else if ((await countPendingEditRequestsForSite(env.DB, site.id)) >= PENDING_LIMIT_PER_SITE) {
+          errorMessage = `이 사이트에 대기 중인 수정 신청이 많아 잠시 접수를 받지 않습니다. ${CONTACT_EMAIL} 로 문의해주세요.`;
+        } else {
+          const requestId = await upsertEditRequest(env.DB, {
+            siteId: site.id,
+            requesterEmail: enteredEmail,
+            emailVerified: emailMatches,
+            changes: changes as Record<string, string>,
+            note: note || null,
+            ipAddress: ip,
+            userAgent: Astro.request.headers.get('user-agent'),
+          });
+
+          // 관리자가 알아채야 반영된다. 알림이 실패해도 신청은 이미 저장돼 있으므로 삼킨다.
+          // 응답 뒤 워커가 끝나면 요청이 끊길 수 있어 기다렸다 보낸다.
+          const telegram = readTelegramConfig(env);
+          if (telegram) {
+            const current = siteFieldValues(site);
+            const emailState: EditEmailState = hasRegisteredEmail ? (emailMatches ? 'verified' : 'unverified') : 'no_registered_email';
+            try {
+              await notifyEditRequest(telegram, {
+                id: requestId,
+                siteName: site.name,
+                siteUrl: site.url,
+                requesterEmail: enteredEmail,
+                emailState,
+                changes: changedKeys.map((key) => ({
+                  label: EDIT_LABELS[key],
+                  from: displayValue(key, current[key], categories, subcategories),
+                  to: displayValue(key, changes[key] ?? '', categories, subcategories),
+                })),
+                note: note || null,
+              });
+            } catch {
+              // 알림은 부가 기능이다.
+            }
+          }
+          return Astro.redirect(`/site/${encodeURIComponent(site.slug)}/edit?sent=1`);
+        }
+      }
+    }
+  }
+
+  if (action === 'verify' && step === 'email') {
+    // 확인 실패 시 입력한 이메일만 남기고 폼 값은 현재 값으로 둔다.
+    formValues = siteFieldValues(site);
+  }
+}
+
+const sections: { title: string; description: string; keys: EditKey[] }[] = [
+  { title: '기본정보', description: '사이트의 핵심 정보입니다.', keys: ['name', 'url', 'tagline', 'description', 'logoUrl', 'coverImageUrl'] },
+  { title: '분류', description: '방문자가 카테고리로 사이트를 찾을 수 있도록 분류합니다.', keys: ['categoryId', 'subcategoryId', 'region', 'siteType', 'platform'] },
+  { title: '검색', description: '검색과 추천에 쓰이는 키워드입니다. 쉼표로 구분하세요.', keys: ['mainKeywords', 'serviceKeywords'] },
+  { title: '운영', description: '입력할수록 방문자 신뢰도가 높아집니다.', keys: ['operatorName', 'businessName', 'serviceRegion', 'customerCenter', 'contactEmail'] },
+  { title: '외부 채널', description: '운영 중인 SNS 채널입니다.', keys: ['blogUrl', 'youtubeUrl', 'instagramUrl', 'facebookUrl', 'otherSnsUrl'] },
+];
+const requiredKeys = new Set<EditKey>(['name', 'url', 'tagline', 'description', 'categoryId']);
+const fullWidthKeys = new Set<EditKey>(['name', 'url', 'tagline', 'description', 'mainKeywords', 'serviceKeywords']);
+const selectOptions: Partial<Record<EditKey, readonly string[]>> = {
+  region: REGIONS,
+  siteType: SITE_TYPES,
+  platform: PLATFORMS,
+};
+
+const subcategoriesByCategory = new Map<number, Subcategory[]>();
+for (const sub of subcategories) {
+  const list = subcategoriesByCategory.get(sub.category_id) ?? [];
+  list.push(sub);
+  subcategoriesByCategory.set(sub.category_id, list);
+}
+
+const inputClass =
+  'mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-slate-900 focus:bg-white focus:outline-none focus:ring-4 focus:ring-slate-900/5';
+const labelClass = 'block text-sm font-medium text-slate-800';
+---
+
+<Layout
+  title={`${site.name} 정보 수정 신청`}
+  description={`${site.name}의 등록 정보 수정을 신청합니다.`}
+  canonicalPath={`/site/${site.slug}/edit`}
+  noindex
+>
+  <div class="mx-auto max-w-2xl">
+    <nav class="text-sm text-slate-400">
+      <a href="/" class="hover:text-slate-600">홈</a> <span class="mx-1">/</span>
+      <a href={`/site/${site.slug}`} class="hover:text-slate-600">{site.name}</a>
+      <span class="mx-1">/</span> 수정 신청
+    </nav>
+
+    <h1 class="mt-3 text-3xl font-bold tracking-tight text-slate-900">정보 수정 신청</h1>
+    <p class="mt-2 text-slate-500">
+      <a href={`/site/${site.slug}`} class="font-medium text-slate-700 underline">{site.name}</a>의 등록 정보를 고칠 수 있습니다.
+      신청하신 내용은 바로 반영되지 않고, 확인을 거쳐 반영됩니다.
+    </p>
+
+    {fromSubmit && (
+      <div class="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+        이미 등록된 사이트라서 새로 등록하지 않고 수정 신청으로 안내해 드립니다.
+      </div>
+    )}
+
+    {sent ? (
+      <div class="mt-8 rounded-2xl border border-green-200 bg-green-50 p-6">
+        <h2 class="text-base font-semibold text-green-800">수정 신청이 접수되었습니다</h2>
+        <p class="mt-2 text-sm text-green-700">
+          확인 후 반영합니다. 반영되면 사이트 페이지에서 바뀐 내용을 확인하실 수 있고, 같은 이메일로 다시 신청하면
+          이전에 대기 중이던 신청은 새 내용으로 바뀝니다.
+        </p>
+        <a href={`/site/${site.slug}`} class="mt-4 inline-block rounded-lg bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800">
+          사이트 페이지로 돌아가기
+        </a>
+      </div>
+    ) : (
+      <>
+        {errorMessage && (
+          <div class="mt-6 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+            <span class="mt-0.5">⚠</span>
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
+        {step === 'email' ? (
+          <form method="post" class="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <input type="hidden" name="step" value="verify" />
+            <h2 class="text-base font-semibold text-slate-900">이메일 확인</h2>
+            <p class="mt-1 text-sm text-slate-500">
+              이 사이트를 등록할 때 입력한 이메일을 적어주세요. 일치하면 수정 신청 화면이 열립니다.
+            </p>
+            <p class="mt-3 text-sm text-slate-600">
+              등록된 이메일: <span class="font-mono text-slate-900">{maskEmail(registeredEmail ?? '')}</span>
+            </p>
+
+            <div class="mt-5">
+              <label class={labelClass} for="email">등록한 이메일</label>
+              <input id="email" name="email" type="email" required autocomplete="email" value={enteredEmail} class={inputClass} />
+            </div>
+
+            <div class="hidden" aria-hidden="true">
+              <label for="website">Website</label>
+              <input id="website" name="website" type="text" tabindex="-1" autocomplete="off" />
+            </div>
+
+            <button type="submit" class="mt-5 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-slate-700">
+              이메일 확인
+            </button>
+            <p class="mt-4 text-xs text-slate-400">
+              이메일이 기억나지 않거나 바뀌었다면 <a href={`mailto:${CONTACT_EMAIL}`} class="underline">{CONTACT_EMAIL}</a> 로 알려주세요.
+              입력하신 이메일은 확인 용도로만 쓰이며 사이트에는 공개되지 않습니다.
+            </p>
+          </form>
+        ) : (
+          <form method="post" class="mt-8 space-y-6">
+            <input type="hidden" name="step" value="submit" />
+
+            {hasRegisteredEmail ? (
+              <>
+                <input type="hidden" name="email" value={enteredEmail} />
+                <div class="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+                  이메일 확인이 완료되었습니다. 현재 값이 채워져 있으니 <b>바꿀 항목만</b> 고쳐서 신청하세요.
+                </div>
+              </>
+            ) : (
+              <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <p class="font-semibold">이 사이트에는 등록된 이메일이 없습니다.</p>
+                <p class="mt-1">
+                  이메일 확인 없이 수정 신청을 받으며, 관리자가 직접 확인한 뒤 반영합니다.
+                  이 사이트의 운영자(관리자)시라면 <a href={`mailto:${CONTACT_EMAIL}`} class="font-medium underline">{CONTACT_EMAIL}</a> 로 메일을
+                  보내주세요. 운영자 이메일을 등록해 드리면, 다음부터는 이메일 확인만으로 바로 신청하실 수 있습니다.
+                </p>
+              </div>
+            )}
+
+            {sections.map((section, index) => (
+              <FormSection index={index + 1} title={section.title} description={section.description}>
+                <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  {section.keys.map((key) => (
+                    <div class={fullWidthKeys.has(key) ? 'sm:col-span-2' : ''}>
+                      <label class={labelClass} for={key}>
+                        {EDIT_LABELS[key]}
+                        {requiredKeys.has(key) && <span class="ml-0.5 text-rose-500">*</span>}
+                      </label>
+                      {key === 'description' ? (
+                        <textarea id={key} name={key} required maxlength="2000" rows="6" class={inputClass}>{formValues[key]}</textarea>
+                      ) : key === 'categoryId' ? (
+                        <select id={key} name={key} required class={inputClass}>
+                          <option value="">선택해주세요</option>
+                          {categories.map((c: Category) => (
+                            <option value={c.id} selected={String(c.id) === formValues.categoryId}>{c.name}</option>
+                          ))}
+                        </select>
+                      ) : key === 'subcategoryId' ? (
+                        <select id={key} name={key} class={inputClass} data-selected={formValues.subcategoryId}>
+                          <option value="">선택 안 함</option>
+                          {categories.map((c: Category) => (
+                            <optgroup label={c.name}>
+                              {(subcategoriesByCategory.get(c.id) ?? []).map((sub) => (
+                                <option value={sub.id} selected={String(sub.id) === formValues.subcategoryId}>{sub.name}</option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      ) : selectOptions[key] ? (
+                        <select id={key} name={key} class={inputClass}>
+                          <option value="">선택 안 함</option>
+                          {selectOptions[key]!.map((option) => (
+                            <option value={option} selected={option === formValues[key]}>{option}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          id={key}
+                          name={key}
+                          type={key === 'contactEmail' ? 'email' : 'text'}
+                          inputmode={key.endsWith('Url') ? 'url' : undefined}
+                          required={requiredKeys.has(key)}
+                          maxlength={key === 'name' ? 100 : key === 'tagline' ? 120 : undefined}
+                          value={formValues[key]}
+                          class={inputClass}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </FormSection>
+            ))}
+
+            <FormSection index={sections.length + 1} title="신청자 정보" description="확인과 연락에 쓰이며 사이트에는 공개되지 않습니다.">
+              {!hasRegisteredEmail && (
+                <div>
+                  <label class={labelClass} for="email">연락받을 이메일<span class="ml-0.5 text-rose-500">*</span></label>
+                  <input id="email" name="email" type="email" required autocomplete="email" value={enteredEmail} class={inputClass} />
+                </div>
+              )}
+              <div>
+                <label class={labelClass} for="note">전달할 메모 (선택)</label>
+                <textarea id="note" name="note" rows="3" maxlength="500" class={inputClass} placeholder="바꾸는 이유나 확인이 필요한 사정이 있다면 적어주세요.">{note}</textarea>
+              </div>
+              <div class="hidden" aria-hidden="true">
+                <label for="website">Website</label>
+                <input id="website" name="website" type="text" tabindex="-1" autocomplete="off" />
+              </div>
+            </FormSection>
+
+            <div class="flex items-center justify-between gap-3">
+              <a href={`/site/${site.slug}`} class="text-sm text-slate-400 underline hover:text-slate-700">취소</a>
+              <button type="submit" class="rounded-xl bg-slate-900 px-6 py-3 text-sm font-medium text-white hover:bg-slate-700">
+                수정 신청하기
+              </button>
+            </div>
+          </form>
+        )}
+      </>
+    )}
+  </div>
+
+  <script type="application/json" id="subcategory-data" is:inline set:html={JSON.stringify(subcategories)} />
+  <script>
+    // 대분류를 바꾸면 그 분류의 중분류만 고를 수 있게 한다.
+    type Sub = { id: number; category_id: number; name: string };
+    const dataEl = document.getElementById('subcategory-data');
+    const categorySelect = document.getElementById('categoryId') as HTMLSelectElement | null;
+    const subSelect = document.getElementById('subcategoryId') as HTMLSelectElement | null;
+    if (dataEl?.textContent && categorySelect && subSelect) {
+      const all = JSON.parse(dataEl.textContent) as Sub[];
+      const render = () => {
+        const categoryId = Number(categorySelect.value);
+        const selected = subSelect.value || subSelect.dataset.selected || '';
+        subSelect.innerHTML = '<option value="">선택 안 함</option>';
+        for (const sub of all.filter((s) => s.category_id === categoryId)) {
+          const option = document.createElement('option');
+          option.value = String(sub.id);
+          option.textContent = sub.name;
+          if (String(sub.id) === selected) option.selected = true;
+          subSelect.appendChild(option);
+        }
+        subSelect.dataset.selected = '';
+      };
+      categorySelect.addEventListener('change', () => {
+        subSelect.value = '';
+        subSelect.dataset.selected = '';
+        render();
+      });
+      render();
+    }
+  </script>
+</Layout>

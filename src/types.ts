@@ -112,3 +112,26 @@ export interface ReviewWithSite extends Review {
   site_name: string;
   site_slug: string;
 }
+
+export type EditRequestStatus = 'pending' | 'applied' | 'rejected';
+
+export interface SiteEditRequest {
+  id: number;
+  site_id: number;
+  requester_email: string;
+  email_verified: number;
+  changes_json: string;
+  note: string | null;
+  status: EditRequestStatus;
+  ip_address: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface SiteEditRequestWithSite extends SiteEditRequest {
+  site_name: string;
+  site_slug: string;
+  site_url: string;
+  site_status: SiteStatus;
+  site_submitted_email: string | null;
+}

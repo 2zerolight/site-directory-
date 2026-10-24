@@ -1,0 +1,245 @@
+---
+import { env } from 'cloudflare:workers';
+import Layout from '../../layouts/Layout.astro';
+import {
+  getEditRequests,
+  getSiteById,
+  getCategories,
+  getAllSubcategories,
+  resolveEditRequest,
+  type AdminEditStatusFilter,
+} from '../../lib/db';
+import { ADMIN_COOKIE_NAME, isValidSessionCookieValue } from '../../lib/auth';
+import { submitToIndexNow } from '../../lib/indexnow';
+import {
+  EDIT_LABELS,
+  applyEditRequest,
+  parseChanges,
+  siteFieldValues,
+  displayValue,
+  type EditKey,
+} from '../../lib/site-edit';
+import { decodeHostnameForDisplay } from '../../lib/urls';
+
+/*
+  사이트 수정 신청 관리. 공개 페이지(/site/[slug]/edit)로 들어온 신청이 여기에 쌓이고,
+  관리자가 현재 값과 요청 값의 차이를 보고 반영하거나 거절한다. 텔레그램 버튼으로도
+  같은 처리를 할 수 있다(applyEditRequest 를 같이 쓴다).
+*/
+const isAuthed = await isValidSessionCookieValue(env.ADMIN_PASSWORD, Astro.cookies.get(ADMIN_COOKIE_NAME)?.value);
+if (!isAuthed) {
+  return Astro.redirect('/dashboard');
+}
+
+const statusParam = (Astro.url.searchParams.get('status') ?? 'pending') as AdminEditStatusFilter;
+const status: AdminEditStatusFilter = (['pending', 'applied', 'rejected', 'all'] as const).includes(statusParam)
+  ? statusParam
+  : 'pending';
+
+if (Astro.request.method === 'POST') {
+  const data = await Astro.request.formData();
+  const action = String(data.get('action') ?? '');
+  const id = Number(data.get('id'));
+  const back = `/dashboard/edits?status=${status}`;
+
+  if (id && action === 'apply') {
+    const result = await applyEditRequest(env.DB, id, { setSubmittedEmail: data.get('setEmail') === 'on' });
+    if (result.ok) {
+      if (result.site.status === 'approved') {
+        // 반영은 끝났으므로 색인 알림이 실패해도 되돌리지 않는다.
+        try {
+          await submitToIndexNow([`/site/${result.site.slug}`]);
+        } catch {
+          // 알림은 부가 기능이다.
+        }
+      }
+      return Astro.redirect(`${back}&done=applied#req-${id}`);
+    }
+    return Astro.redirect(`${back}&done=${result.reason}#req-${id}`);
+  }
+  if (id && action === 'reject') {
+    await resolveEditRequest(env.DB, id, 'rejected');
+    return Astro.redirect(`${back}&done=rejected#req-${id}`);
+  }
+  return Astro.redirect(back);
+}
+
+const [requests, categories, subcategories] = await Promise.all([
+  getEditRequests(env.DB, status),
+  getCategories(env.DB),
+  getAllSubcategories(env.DB),
+]);
+
+const siteIds = [...new Set(requests.map((r) => r.site_id))];
+const sites = new Map(
+  (await Promise.all(siteIds.map(async (id) => [id, await getSiteById(env.DB, id)] as const))).map(([id, site]) => [id, site])
+);
+
+const done = Astro.url.searchParams.get('done');
+const doneMessages: Record<string, { tone: 'ok' | 'error'; text: string }> = {
+  applied: { tone: 'ok', text: '반영했습니다. 승인된 사이트면 IndexNow 로 바뀐 주소도 알렸습니다.' },
+  rejected: { tone: 'ok', text: '거절했습니다.' },
+  already_resolved: { tone: 'error', text: '이미 처리된 신청입니다.' },
+  no_changes: { tone: 'error', text: '반영할 변경 항목이 없습니다.' },
+  not_found: { tone: 'error', text: '신청이나 사이트를 찾을 수 없습니다.' },
+};
+const doneMessage = done ? doneMessages[done] : null;
+
+const formatDate = (value: string) =>
+  new Date(value.replace(' ', 'T') + 'Z').toLocaleString('ko-KR', {
+    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+
+const tabs: { value: AdminEditStatusFilter; label: string }[] = [
+  { value: 'pending', label: '대기' },
+  { value: 'applied', label: '반영됨' },
+  { value: 'rejected', label: '거절됨' },
+  { value: 'all', label: '전체' },
+];
+const statusLabel = { pending: '대기', applied: '반영됨', rejected: '거절됨' } as const;
+const statusBadge = {
+  pending: 'bg-amber-100 text-amber-700',
+  applied: 'bg-green-100 text-green-700',
+  rejected: 'bg-red-100 text-red-700',
+} as const;
+---
+
+<Layout title="수정 신청 관리" description="사이트 수정 신청 검토" canonicalPath="/dashboard/edits" noindex>
+  <div class="flex items-center justify-between">
+    <h1 class="text-xl font-bold text-slate-900">수정 신청 관리</h1>
+    <div class="flex gap-4 text-sm">
+      <a href="/dashboard" class="text-slate-400 underline hover:text-slate-700">사이트 관리</a>
+      <a href="/dashboard/reviews" class="text-slate-400 underline hover:text-slate-700">리뷰 관리</a>
+      <a href="/dashboard/stats" class="text-slate-400 underline hover:text-slate-700">통계</a>
+    </div>
+  </div>
+
+  <p class="mt-2 text-xs text-slate-400">
+    운영자가 공개 페이지에서 신청한 수정 내용입니다. 바뀐 항목만 보이며, 반영하면 사이트 정보가 바로 바뀝니다.
+    이메일이 일치해도 신청 자체를 자동으로 믿지는 않으니 내용을 보고 판단하세요.
+  </p>
+
+  {doneMessage && (
+    <div class={`mt-4 rounded-md border p-3 text-sm ${doneMessage.tone === 'ok' ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+      {doneMessage.text}
+    </div>
+  )}
+
+  <div class="mt-4 flex flex-wrap gap-2">
+    {tabs.map((tab) => (
+      <a
+        href={`/dashboard/edits?status=${tab.value}`}
+        class={`rounded-full px-3 py-1.5 text-sm font-medium ${status === tab.value ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+      >
+        {tab.label}
+      </a>
+    ))}
+  </div>
+
+  {requests.length === 0 ? (
+    <p class="mt-10 text-slate-400">해당하는 수정 신청이 없습니다.</p>
+  ) : (
+    <ul class="mt-6 space-y-4">
+      {requests.map((request) => {
+        const site = sites.get(request.site_id) ?? null;
+        const changes = parseChanges(request.changes_json);
+        const keys = Object.keys(changes) as EditKey[];
+        const current = site ? siteFieldValues(site) : null;
+        const isPending = request.status === 'pending';
+
+        let domainChange: { from: string; to: string } | null = null;
+        if (changes.url && site) {
+          try {
+            const from = decodeHostnameForDisplay(new URL(site.url).hostname).replace(/^www\./, '');
+            const to = decodeHostnameForDisplay(new URL(changes.url).hostname).replace(/^www\./, '');
+            if (from !== to) domainChange = { from, to };
+          } catch {
+            domainChange = null;
+          }
+        }
+
+        return (
+          <li id={`req-${request.id}`} class="scroll-mt-4 rounded-lg border border-slate-200 bg-white p-4">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="font-semibold text-slate-900">
+                  <a href={`/dashboard?site=${request.site_id}`} class="hover:underline">{request.site_name}</a>
+                  <span class={`ml-2 rounded-full px-2 py-0.5 text-xs font-normal ${statusBadge[request.status]}`}>{statusLabel[request.status]}</span>
+                  {request.email_verified ? (
+                    <span class="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-normal text-green-700">등록 이메일과 일치</span>
+                  ) : request.site_submitted_email ? (
+                    <span class="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-normal text-amber-700">등록 이메일과 다름</span>
+                  ) : (
+                    <span class="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-600">등록된 이메일 없음 · 미확인</span>
+                  )}
+                </p>
+                <p class="mt-1 text-xs text-slate-400">
+                  <a href={`/site/${request.site_slug}`} class="underline">사이트 보기</a>{" "}
+                  · 신청자 <span class="font-mono text-slate-600">{request.requester_email}</span>
+                  · {formatDate(request.created_at)} 접수
+                  {request.resolved_at && ` · ${formatDate(request.resolved_at)} 처리`}
+                </p>
+              </div>
+              {isPending && (
+                <div class="flex shrink-0 gap-2">
+                  <form method="post" class="flex items-center gap-2">
+                    <input type="hidden" name="action" value="apply" />
+                    <input type="hidden" name="id" value={request.id} />
+                    {!request.site_submitted_email && (
+                      <label class="flex items-center gap-1 text-xs text-slate-500" title="이 사이트에 등록된 이메일이 없습니다. 운영자가 맞다면 이 이메일을 등록 이메일로 저장해 다음부터 이메일 확인으로 신청하게 합니다.">
+                        <input type="checkbox" name="setEmail" />
+                        이 이메일을 등록 이메일로 저장
+                      </label>
+                    )}
+                    <button type="submit" class="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-500">반영</button>
+                  </form>
+                  <form method="post">
+                    <input type="hidden" name="action" value="reject" />
+                    <input type="hidden" name="id" value={request.id} />
+                    <button type="submit" class="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500">거절</button>
+                  </form>
+                </div>
+              )}
+            </div>
+
+            {domainChange && (
+              <p class="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                도메인이 <b>{domainChange.from}</b> → <b>{domainChange.to}</b> 로 바뀝니다.
+                {site?.ownership_verified ? ' 이 사이트는 소유권 인증이 되어 있는데, 인증은 이전 도메인 기준이라 반영하면 인증 표시가 맞지 않게 됩니다.' : ''}
+              </p>
+            )}
+
+            {request.note && (
+              <p class="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700 whitespace-pre-line break-words">
+                <span class="text-xs text-slate-400">메모 </span>{request.note}
+              </p>
+            )}
+
+            <div class="mt-3 overflow-x-auto">
+              <table class="w-full min-w-[32rem] border-collapse text-left text-sm">
+                <thead>
+                  <tr class="border-b border-slate-200 text-xs text-slate-400">
+                    <th class="w-28 py-1.5 pr-3 font-medium">항목</th>
+                    {isPending && current && <th class="py-1.5 pr-3 font-medium">현재</th>}
+                    <th class="py-1.5 font-medium">{isPending ? '요청' : '요청한 값'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {keys.map((key) => (
+                    <tr class="border-b border-slate-100 align-top">
+                      <th scope="row" class="py-2 pr-3 font-medium text-slate-600">{EDIT_LABELS[key]}</th>
+                      {isPending && current && (
+                        <td class="py-2 pr-3 text-slate-400 whitespace-pre-line break-all">{displayValue(key, current[key], categories, subcategories)}</td>
+                      )}
+                      <td class="py-2 text-slate-900 whitespace-pre-line break-all">{displayValue(key, changes[key] ?? '', categories, subcategories)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  )}
+</Layout>

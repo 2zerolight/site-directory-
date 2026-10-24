@@ -416,6 +416,13 @@ const jsonLd = [webPageJsonLd, breadcrumbJsonLd];
       남의 인증 토큰을 읽고 등록 상태를 바꿀 수 있었다. 이제는 연락을 받아 관리자가
       직접 처리하므로 안내만 남긴다.
     */}
+    {isApproved && (
+      <p class="mt-4 text-xs text-slate-400">
+        등록 정보가 달라졌나요?
+        <a href={`/site/${site.slug}/edit`} class="underline underline-offset-2 hover:text-slate-600">수정 신청하기</a>
+      </p>
+    )}
+
     {isApproved && !site.ownership_verified && (
       <p class="mt-4 text-xs text-slate-400">
         이 사이트 운영자세요? 소유권을 인증하면 인증 배지를 무료로 받으실 수 있습니다.
