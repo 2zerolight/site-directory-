@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS favicon_cache;
 DROP TABLE IF EXISTS site_edit_requests;
 DROP TABLE IF EXISTS site_logos;
 DROP TABLE IF EXISTS site_tags;
@@ -130,6 +131,12 @@ CREATE TABLE site_edit_requests (
 
 CREATE INDEX idx_site_edit_requests_status ON site_edit_requests(status, created_at);
 CREATE INDEX idx_site_edit_requests_site ON site_edit_requests(site_id, status);
+
+CREATE TABLE favicon_cache (
+  host TEXT PRIMARY KEY,
+  payload TEXT NOT NULL,
+  fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 CREATE TABLE reviews (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
