@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS favicon_lookups;
 DROP TABLE IF EXISTS favicon_cache;
 DROP TABLE IF EXISTS site_edit_requests;
 DROP TABLE IF EXISTS site_logos;
@@ -131,6 +132,15 @@ CREATE TABLE site_edit_requests (
 
 CREATE INDEX idx_site_edit_requests_status ON site_edit_requests(status, created_at);
 CREATE INDEX idx_site_edit_requests_site ON site_edit_requests(site_id, status);
+
+CREATE TABLE favicon_lookups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ip TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_favicon_lookups_created ON favicon_lookups(created_at);
+CREATE INDEX idx_favicon_lookups_ip ON favicon_lookups(ip, created_at);
 
 CREATE TABLE favicon_cache (
   host TEXT PRIMARY KEY,

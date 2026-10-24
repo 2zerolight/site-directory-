@@ -18,6 +18,12 @@ const DEFAULT_BASE = 'https://tool99.net/api/v1/favicon';
 const TIMEOUT_MS = 7000;
 const MAX_STORED = 20;
 
+/**
+  제공처 한도는 키 하나에 분당 60회다. 우리 쪽 전체 호출을 그 아래로 눌러 두어, 방문자가 많이
+  불러도 관리자 화면이 막히지 않게 한다. 캐시에서 나간 응답은 세지 않는다.
+*/
+const GLOBAL_PER_MINUTE = 45;
+
 /** 화면에 보여주는 최대 개수. */
 export const MAX_ICONS = 5;
 
@@ -33,6 +39,7 @@ export interface FaviconIcon {
 
 export type FaviconFailure =
   | 'invalid'
+  | 'forbidden'
   | 'disabled'
   | 'unauthorized'
   | 'blocked'
@@ -136,7 +143,49 @@ async function writeCache(db: D1Database, host: string, icons: FaviconIcon[]): P
   }
 }
 
-export async function getFavicons(env: FaviconEnv, target: string): Promise<FaviconResult> {
+/**
+ * 호출자별 제한. perIp* 를 주지 않으면 그 호출자는 IP 제한을 받지 않는다(관리자).
+ * 전체 호출 제한은 호출자와 무관하게 항상 적용된다.
+ */
+export interface LookupPolicy {
+  ip: string | null;
+  perIpPerMinute?: number;
+  perIpPerHour?: number;
+}
+
+/** 제공처로 나가도 되는지 판단하고, 나가기로 했다면 기록을 남긴다. 기록을 못 남기면 막는다. */
+async function allowUpstreamCall(db: D1Database, policy: LookupPolicy): Promise<FaviconFailure | null> {
+  try {
+    const global = await db
+      .prepare(`SELECT COUNT(*) AS n FROM favicon_lookups WHERE created_at >= datetime('now', '-1 minute')`)
+      .first<{ n: number }>();
+    if ((global?.n ?? 0) >= GLOBAL_PER_MINUTE) return 'busy';
+
+    const ip = policy.ip ?? 'unknown';
+    if (policy.perIpPerMinute !== undefined && policy.perIpPerHour !== undefined) {
+      const mine = await db
+        .prepare(
+          `SELECT COALESCE(SUM(created_at >= datetime('now', '-1 minute')), 0) AS m, COUNT(*) AS h
+           FROM favicon_lookups WHERE ip = ? AND created_at >= datetime('now', '-1 hour')`
+        )
+        .bind(ip)
+        .first<{ m: number; h: number }>();
+      if ((mine?.m ?? 0) >= policy.perIpPerMinute || (mine?.h ?? 0) >= policy.perIpPerHour) return 'rate_limited';
+    }
+
+    await db.prepare(`INSERT INTO favicon_lookups (ip) VALUES (?)`).bind(ip).run();
+    await db.prepare(`DELETE FROM favicon_lookups WHERE created_at < datetime('now', '-1 hour')`).run();
+    return null;
+  } catch {
+    return 'error';
+  }
+}
+
+export async function getFavicons(
+  env: FaviconEnv,
+  target: string,
+  policy: LookupPolicy = { ip: 'admin' }
+): Promise<FaviconResult> {
   const normalized = normalizeRequiredUrl(target);
   if (!normalized) return { ok: false, reason: 'invalid' };
   const host = normalized.hostname.toLowerCase();
@@ -147,6 +196,9 @@ export async function getFavicons(env: FaviconEnv, target: string): Promise<Favi
 
   const key = env.FAVICON_API_KEY?.trim();
   if (!key) return { ok: false, reason: 'disabled' };
+
+  const blocked = await allowUpstreamCall(env.DB, policy);
+  if (blocked) return { ok: false, reason: blocked };
 
   const base = env.FAVICON_API_BASE?.trim() || DEFAULT_BASE;
   const controller = new AbortController();
