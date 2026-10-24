@@ -169,14 +169,14 @@ if (Astro.request.method === 'POST') {
 }
 
 const sections: { title: string; description: string; keys: EditKey[] }[] = [
-  { title: '기본정보', description: '사이트의 핵심 정보입니다.', keys: ['name', 'url', 'tagline', 'description', 'logoUrl', 'coverImageUrl'] },
+  { title: '기본정보', description: '사이트의 핵심 정보입니다.', keys: ['name', 'tagline', 'description', 'logoUrl', 'coverImageUrl'] },
   { title: '분류', description: '방문자가 카테고리로 사이트를 찾을 수 있도록 분류합니다.', keys: ['categoryId', 'subcategoryId', 'region', 'siteType', 'platform'] },
   { title: '검색', description: '검색과 추천에 쓰이는 키워드입니다. 쉼표로 구분하세요.', keys: ['mainKeywords', 'serviceKeywords'] },
   { title: '운영', description: '입력할수록 방문자 신뢰도가 높아집니다.', keys: ['operatorName', 'businessName', 'serviceRegion', 'customerCenter', 'contactEmail'] },
   { title: '외부 채널', description: '운영 중인 SNS 채널입니다.', keys: ['blogUrl', 'youtubeUrl', 'instagramUrl', 'facebookUrl', 'otherSnsUrl'] },
 ];
-const requiredKeys = new Set<EditKey>(['name', 'url', 'tagline', 'description', 'categoryId']);
-const fullWidthKeys = new Set<EditKey>(['name', 'url', 'tagline', 'description', 'mainKeywords', 'serviceKeywords']);
+const requiredKeys = new Set<EditKey>(['name', 'tagline', 'description', 'categoryId']);
+const fullWidthKeys = new Set<EditKey>(['name', 'tagline', 'description', 'mainKeywords', 'serviceKeywords']);
 const selectOptions: Partial<Record<EditKey, readonly string[]>> = {
   region: REGIONS,
   siteType: SITE_TYPES,
@@ -293,6 +293,16 @@ const labelClass = 'block text-sm font-medium text-slate-800';
 
             {sections.map((section, index) => (
               <FormSection index={index + 1} title={section.title} description={section.description}>
+                {index === 0 && (
+                  <div>
+                    <label class={labelClass} for="siteUrlFixed">사이트 URL</label>
+                    <input id="siteUrlFixed" type="text" value={site.url} disabled class={`${inputClass} cursor-not-allowed bg-slate-100 text-slate-500`} />
+                    <p class="mt-1.5 text-xs text-slate-400">
+                      주소는 여기서 바꿀 수 없습니다. 사이트 주소가 바뀌었다면
+                      <a href={`mailto:${CONTACT_EMAIL}`} class="underline">{CONTACT_EMAIL}</a> 로 알려주세요.
+                    </p>
+                  </div>
+                )}
                 <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
                   {section.keys.map((key) => (
                     <div class={fullWidthKeys.has(key) ? 'sm:col-span-2' : ''}>

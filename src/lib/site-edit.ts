@@ -1,6 +1,6 @@
 import type { Category, Subcategory, SiteWithCategory } from '../types';
 import { REGIONS, SITE_TYPES, PLATFORMS } from './constants';
-import { normalizeRequiredUrl, normalizeOptionalUrl } from './urls';
+import { normalizeOptionalUrl } from './urls';
 import { OWN_LOGO_PATH } from './logo-upload';
 import {
   updateSiteFields,
@@ -26,8 +26,14 @@ import {
   주소는 비밀이 아니므로 신청을 자동으로 믿지 않고, 반영은 항상 관리자 손을 거친다.
 */
 
+/*
+  사이트 주소(url)는 일부러 항목에서 뺐다. 주소를 바꿀 수 있으면 남의 사이트 등록을 다른
+  도메인으로 바꿔치기할 수 있고, 소유권 인증도 이전 도메인 기준이라 어긋난다. 주소가 바뀐
+  경우는 문의 메일로 받아 관리자가 직접 처리한다. 항목에 없으므로 요청 본문에 url 을 실어
+  보내도 검증·비교·반영 어디에서도 읽지 않는다.
+*/
 export const EDIT_KEYS = [
-  'name', 'url', 'tagline', 'description', 'logoUrl', 'coverImageUrl',
+  'name', 'tagline', 'description', 'logoUrl', 'coverImageUrl',
   'categoryId', 'subcategoryId', 'region', 'siteType', 'platform',
   'mainKeywords', 'serviceKeywords',
   'operatorName', 'businessName', 'serviceRegion', 'customerCenter', 'contactEmail',
@@ -40,7 +46,6 @@ export type EditChanges = Partial<EditValues>;
 
 export const EDIT_LABELS: Record<EditKey, string> = {
   name: '사이트 이름',
-  url: '사이트 URL',
   tagline: '한 줄 소개',
   description: '상세 설명',
   logoUrl: '로고 이미지 URL',
@@ -87,7 +92,6 @@ export function maskEmail(email: string): string {
 export function siteFieldValues(site: SiteWithCategory): EditValues {
   return {
     name: site.name,
-    url: site.url,
     tagline: site.tagline ?? '',
     description: site.description ?? '',
     logoUrl: site.logo_url ?? '',
@@ -116,7 +120,6 @@ export function siteFieldValues(site: SiteWithCategory): EditValues {
 function canon(key: EditKey, raw: string): string {
   const value = raw.trim();
   if (!value) return '';
-  if (key === 'url') return normalizeRequiredUrl(value)?.toString() ?? value;
   if (OPTIONAL_URL_KEYS.includes(key)) {
     if (key === 'logoUrl' && OWN_LOGO_PATH.test(value)) return value;
     return normalizeOptionalUrl(value).value ?? value;
@@ -137,8 +140,6 @@ export function parseEditForm(
   const fail = (error: string): ParseResult => ({ ok: false, error });
 
   if (!raw.name || raw.name.length > 100) return fail('사이트 이름을 입력해주세요 (100자 이내).');
-  const url = normalizeRequiredUrl(raw.url);
-  if (!url) return fail('올바른 사이트 URL을 입력해주세요 (예: example.com).');
   if (!raw.tagline || raw.tagline.length > 120) return fail('한 줄 소개를 입력해주세요 (120자 이내).');
   if (!raw.description || raw.description.length > 2000) return fail('상세 설명을 입력해주세요 (2000자 이내).');
 
@@ -153,7 +154,7 @@ export function parseEditForm(
   if (raw.platform && !(PLATFORMS as readonly string[]).includes(raw.platform)) return fail('올바른 플랫폼을 선택해주세요.');
   if (raw.contactEmail && !isValidEmail(raw.contactEmail)) return fail('공개 이메일 형식을 확인해주세요.');
 
-  const values = { ...raw, url: url.toString() } as EditValues;
+  const values = { ...raw } as EditValues;
   for (const key of OPTIONAL_URL_KEYS) {
     if (!raw[key]) continue;
     if (key === 'logoUrl' && OWN_LOGO_PATH.test(raw[key])) continue;
@@ -207,7 +208,7 @@ export function buildUpdateInput(site: SiteWithCategory, changes: EditChanges): 
   const v = { ...siteFieldValues(site), ...changes };
   return {
     name: v.name,
-    url: v.url,
+    url: site.url,
     tagline: v.tagline,
     description: v.description,
     logoUrl: nullable(v.logoUrl),
